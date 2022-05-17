@@ -10,7 +10,9 @@ use std::{cmp, fs, io};
 
 use std::fs::{read_dir, File};
 
-use crate::layout::{DEFAULT_LAYOUT, Key, KeyCost, Layer, Layout, NUM_KEYS, NUM_LAYERS, NextKeyCost};
+use crate::layout::{
+    Key, KeyCost, Layer, Layout, NextKeyCost, DEFAULT_LAYOUT, NUM_KEYS, NUM_LAYERS,
+};
 
 const CORPUS_DIR: &str = "corpus";
 
@@ -91,11 +93,11 @@ fn next_key_cost(i: usize, j: usize) -> u8 {
             Finger::Thumb => 3,
         };
         let strength_penalty = match f0 {
-            Finger::Index => 2,
-            Finger::Middle => 2,
-            Finger::Ring => 4,
-            Finger::Pinky => 6,
-            Finger::Thumb => 3,
+            Finger::Index => 6,
+            Finger::Middle => 6,
+            Finger::Ring => 12,
+            Finger::Pinky => 18,
+            Finger::Thumb => 9,
         };
         let sq_dist =
             vert_penalty(f0) as usize * row_dist * row_dist + horiz_penalty * col_dist * col_dist;
@@ -191,38 +193,45 @@ impl<'nkc> TypingModel<'nkc> {
         }
     }
 
-    fn type_char(&mut self, c: char) {
-        let idx = self.char_idx.get(&c).copied();
-        match (self.state, idx) {
-            (None, Some((j0, j1))) => {
+    fn cost_of_typing(&self, from: Option<(usize, usize)>, pos: (usize, usize)) -> u64 {
+        let (j0, j1) = pos;
+        match from {
+            None => {
                 if j0 != 0 {
                     // Switch to the correct layer.
                     let l = self.layer_idx[j0];
-                    self.total_cost += KEY_COST[l] as u64;
-                    self.total_cost += KEY_COST[j1] as u64 + self.next_key_cost[l][j1] as u64;
+                    KEY_COST[l] as u64 + KEY_COST[j1] as u64 + self.next_key_cost[l][j1] as u64
                 } else {
-                    self.total_cost += KEY_COST[j1] as u64;
+                    KEY_COST[j1] as u64
                 }
-                self.count += 1;
             }
-            (Some((i0, i1)), Some((j0, j1))) => {
+            Some((i0, i1)) => {
                 if j0 != 0 {
                     let l = self.layer_idx[j0];
                     if j0 != i0 {
                         // Switch to the correct layer.
-                        self.total_cost += KEY_COST[l] as u64 + self.next_key_cost[i1][l] as u64;
-                        self.total_cost += KEY_COST[j1] as u64 + self.next_key_cost[l][j1] as u64;
+                        KEY_COST[l] as u64
+                            + self.next_key_cost[i1][l] as u64
+                            + KEY_COST[j1] as u64
+                            + self.next_key_cost[l][j1] as u64
                     } else {
                         // Apply a penalty for holding the layer key.
-                        self.total_cost += hold_key_cost(l, j1) as u64;
-                        self.total_cost += KEY_COST[j1] as u64 + self.next_key_cost[i1][j1] as u64;
+                        hold_key_cost(l, j1) as u64
+                            + KEY_COST[j1] as u64
+                            + self.next_key_cost[i1][j1] as u64
                     }
                 } else {
-                    self.total_cost += KEY_COST[j1] as u64 + self.next_key_cost[i1][j1] as u64;
+                    KEY_COST[j1] as u64 + self.next_key_cost[i1][j1] as u64
                 }
-                self.count += 1;
             }
-            _ => {}
+        }
+    }
+
+    fn type_char(&mut self, c: char) {
+        let idx = self.char_idx.get(&c).copied();
+        if let Some(pos) = idx {
+            self.total_cost += self.cost_of_typing(self.state, pos);
+            self.count += 1;
         }
         self.state = idx;
     }
@@ -293,13 +302,134 @@ pub fn string_cost(next_key_cost: &NextKeyCost, layout: &Layout, string: &str) -
     (model.total_cost, model.count)
 }
 
+fn similarity_cost(layout: &Layout) -> f64 {
+    layout.hamming_dist(&DEFAULT_LAYOUT) as f64 / (NUM_KEYS * NUM_LAYERS) as f64 * 0.5
+}
+
+fn memorability_cost(layout: &Layout) -> f64 {
+    let char_idx: AHashMap<_, _> = layout
+        .iter()
+        .enumerate()
+        .flat_map(|(i, l)| {
+            l.iter().enumerate().filter_map(move |(j, k)| match k {
+                Key::Char(c) => Some((*c, (i, j))),
+                _ => None,
+            })
+        })
+        .collect();
+
+    let ordered_pairs = [['(', ')'], ['{', '}'], ['[', ']'], ['<', '>']];
+    let ordered_pair_penalty: f64 = ordered_pairs
+        .into_iter()
+        .map(|[l, r]| {
+            let (i0, i1) = char_idx[&l];
+            let (j0, j1) = char_idx[&r];
+            if i0 != j0 {
+                if i1 != j1 {
+                    // Different key and layer.
+                    6.
+                } else {
+                    // Same key, different layer.
+                    2.
+                }
+            } else {
+                // Same layer.
+                let ri = i1 / 10;
+                let ci = i1 % 10;
+                let rj = j1 / 10;
+                let cj = j1 % 10;
+                if ri == rj {
+                    // Same row.
+                    if (ri == 3 && ci < 2 && cj == 3 - ci) || (ci < 5 && cj == 9 - ci) {
+                        // Mirrored between sides.
+                        0.
+                    } else if cj == ci + 1 {
+                        // Next to each other.
+                        0.
+                    } else if ci < cj && (cj < 5 || 5 <= ci) {
+                        // In order on the same side.
+                        1.
+                    } else {
+                        // Somewhere else in the same row.
+                        4.
+                    }
+                } else if ci == cj {
+                    // Same column.
+                    1.
+                } else {
+                    // Different row and column.
+                    4.
+                }
+            }
+        })
+        .sum();
+    let similar_pairs = [
+        ['+', '-'],
+        ['\'', '"'],
+        ['*', '/'],
+        ['*', '&'],
+        ['\\', '/'],
+        ['!', '?'],
+        ['.', ','],
+        ['$', '£'],
+        ['-', '_'],
+        ['-', '~'],
+        ['/', '%'],
+        ['\'', '`'],
+        [';', ':'],
+        ['+', '*'],
+    ];
+    let similar_pair_penalty: f64 = similar_pairs
+        .into_iter()
+        .map(|[i, j]| {
+            let (i0, i1) = char_idx[&i];
+            let (j0, j1) = char_idx[&j];
+            if i0 != j0 {
+                if i1 != j1 {
+                    // Different key and layer.
+                    4.
+                } else {
+                    // Same key, different layer.
+                    1.
+                }
+            } else {
+                // Same layer.
+                let ri = i1 / 10;
+                let ci = i1 % 10;
+                let rj = j1 / 10;
+                let cj = j1 % 10;
+                if ri == rj {
+                    // Same row.
+                    if (ri == 3 && cj == 3 - ci) || (cj == 9 - ci) {
+                        // Mirrored between sides.
+                        0.
+                    } else if cj == ci + 1 || ci == cj + 1 {
+                        // Next to each other.
+                        0.
+                    } else {
+                        // Somewhere else in the same row.
+                        2.
+                    }
+                } else if ci == cj {
+                    // Same column.
+                    0.
+                } else {
+                    // Different row and column.
+                    2.
+                }
+            }
+        })
+        .sum();
+    0.01 * ordered_pair_penalty + 0.002 * similar_pair_penalty
+}
+
 fn cost(next_key_cost: &NextKeyCost, corpus: &[String], layout: &Layout) -> f64 {
     let (t, c) = corpus
         .par_iter()
         .map(|s| string_cost(next_key_cost, layout, s))
         .reduce(|| (0, 0), |(a0, a1), (b0, b1)| (a0 + b0, a1 + b1));
 
-    t as f64 / c as f64 + layout.hamming_dist(&DEFAULT_LAYOUT) as f64 / (NUM_KEYS * NUM_LAYERS) as f64 * 0.5
+    t as f64 / c as f64 + similarity_cost(layout) + memorability_cost(layout)
 }
 
 fn read_corpus_impl<P: AsRef<Path>>(corpus: &mut Vec<String>, path: P) -> io::Result<()> {
@@ -430,7 +560,7 @@ impl Mutation {
     }
 }
 
-const N: u32 = 20000;
+const N: u32 = 100000;
 const T0: f64 = 30.;
 const K: f64 = 10.;
 const P0: f64 = 1.;
@@ -456,6 +586,39 @@ pub fn optimise(mut layout: Layout) -> io::Result<Layout> {
             .try_into()
             .unwrap(),
     );
+
+    let model = TypingModel::new(&next_key_cost, &layout);
+    for l in 0..NUM_LAYERS {
+        let costs = Layer(
+            (0..NUM_KEYS)
+                .map(|i| model.cost_of_typing(None, (l, i)))
+                .collect::<Vec<_>>()
+                .try_into()
+                .unwrap(),
+        );
+        eprintln!("{:?}", costs);
+    }
+
+    // [
+    //     Layer([
+    //         30, 24, 20, 22, 32,  32, 22, 20, 24, 30,
+    //         16, 13, 11, 10, 29,  29, 10, 11, 13, 16,
+    //         32, 26, 23, 16, 30,  30, 16, 23, 26, 32,
+    //                     16, 11,  11, 16,
+    //     ]),
+    //     Layer([
+    //         47, 41, 37, 39, 51,  50, 40, 38, 42, 48,
+    //         33, 30, 28, 27, 48,  47, 28, 29, 31, 34,
+    //         49, 43, 40, 34, 51,  48, 34, 41, 44, 50,
+    //                     41, 37,  29, 34,
+    //     ]),
+    //     Layer([
+    //         43, 37, 33, 35, 45,  45, 34, 32, 36, 42,
+    //         29, 26, 24, 23, 42,  42, 22, 23, 25, 28,
+    //         45, 39, 36, 29, 43,  44, 29, 35, 38, 44,
+    //                     29, 24,  31, 37,
+    //     ]),
+    // ];
 
     let mut rng = thread_rng();
     let initial_energy = cost(&next_key_cost, &corpus, &layout);
