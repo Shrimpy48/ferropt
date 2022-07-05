@@ -1,14 +1,11 @@
 use rand::{thread_rng, Rng};
-use rayon::prelude::*;
 
 use ahash::AHashMap;
 
 use std::path::Path;
 use std::{cmp, fs, io, iter};
 
-use crate::layout::{
-    Key, KeyCost, Layer, Layout, NextKeyCost, DEFAULT_LAYOUT, NUM_KEYS, NUM_LAYERS,
-};
+use crate::layout::{Key, KeyCost, Layer, Layout, NextKeyCost, NUM_KEYS, NUM_LAYERS};
 
 const CORPUS_DIR: &str = "corpus";
 
@@ -70,7 +67,6 @@ fn vert_penalty(f: Finger) -> u8 {
 const OUTWARD_PENALTY: u8 = 1;
 
 fn next_key_cost(i: usize, j: usize) -> u8 {
-    // NEXT_KEY_COST[i][j]
     let r0 = i / 10;
     let c0 = i % 10;
     let r1 = j / 10;
@@ -143,8 +139,65 @@ fn next_key_cost(i: usize, j: usize) -> u8 {
 }
 
 fn held_key_cost(i: usize, j: usize) -> u8 {
-    // Approximate by next key cost.
-    2 + next_key_cost(i, j)
+    let r0 = i / 10;
+    let c0 = i % 10;
+    let r1 = j / 10;
+    let c1 = j % 10;
+    let row_dist = if r0 <= r1 { r1 - r0 } else { r0 - r1 };
+    let (h0, f0) = finger_for_pos(r0, c0);
+    let (h1, f1) = finger_for_pos(r1, c1);
+    let strength_penalty = match f0 {
+        Finger::Index => 6,
+        Finger::Middle => 6,
+        Finger::Ring => 8,
+        Finger::Pinky => 10,
+        Finger::Thumb => 6,
+    };
+    if (h0, f0) == (h1, f1) {
+        // Same finger.
+        100
+    } else if h0 == h1 {
+        // Same hand, different finger.
+        if f0 == Finger::Thumb {
+            // Thumb to finger.
+            return strength_penalty
+                + match (c0, c1, r1) {
+                    (1 | 2, 4 | 5, 0 | 1) => 2,
+                    (1 | 2, 4 | 5, 2) => 3,
+                    (1 | 2, 3 | 6, 2) => 2,
+                    (0 | 3, 4 | 5, 0 | 1) => 3,
+                    (0 | 3, 4 | 5, 2) => 5,
+                    (0 | 3, 3 | 6, 2) => 2,
+                    _ => OUTWARD_PENALTY,
+                };
+        } else if f1 == Finger::Thumb {
+            // Finger to thumb.
+            return strength_penalty
+                + match (c1, c0, r0) {
+                    (1 | 2, 4 | 5, 0 | 1) => 2,
+                    (1 | 2, 4 | 5, 2) => 3,
+                    (1 | 2, 3 | 6, 2) => 2,
+                    (0 | 3, 4 | 5, 0 | 1) => 3,
+                    (0 | 3, 4 | 5, 2) => 5,
+                    (0 | 3, 3 | 6, 2) => 2,
+                    _ => 0,
+                };
+        };
+        // Finger to finger.
+        let outward = match h0 {
+            Hand::Left => c1 < c0,
+            Hand::Right => c1 > c0,
+        };
+        let stretch = c0 == 4 || c0 == 5 || c1 == 4 || c1 == 5;
+        let dist = ((row_dist * vert_penalty(f1) as usize) as f64).log2() as u8;
+        (if outward { OUTWARD_PENALTY } else { 0 })
+            + (if stretch { 2 } else { 0 })
+            + dist
+            + strength_penalty
+    } else {
+        // Different hand.
+        strength_penalty
+    }
 }
 
 fn keys(
@@ -466,114 +519,118 @@ pub fn string_cost(
 }
 
 fn similarity_cost(layout: &Layout) -> f64 {
-    layout.hamming_dist(&DEFAULT_LAYOUT) as f64 / (NUM_KEYS * NUM_LAYERS) as f64 * 0.5
+    0.
+    // layout.hamming_dist(&DEFAULT_LAYOUT) as f64 / (NUM_KEYS * NUM_LAYERS) as f64 * 0.5
 }
 
 fn memorability_cost(char_idx: &AHashMap<char, (usize, usize)>) -> f64 {
-    let ordered_pairs = [['(', ')'], ['{', '}'], ['[', ']'], ['<', '>']];
-    let ordered_pair_penalty: f64 = ordered_pairs
-        .into_iter()
-        .map(|[l, r]| {
-            let (i0, i1) = char_idx[&l];
-            let (j0, j1) = char_idx[&r];
-            if i0 != j0 {
-                if i1 != j1 {
-                    // Different key and layer.
-                    6.
-                } else {
-                    // Same key, different layer.
-                    2.
-                }
-            } else {
-                // Same layer.
-                let ri = i1 / 10;
-                let ci = i1 % 10;
-                let rj = j1 / 10;
-                let cj = j1 % 10;
-                if ri == rj {
-                    // Same row.
-                    if (ri == 3 && ci < 2 && cj == 3 - ci) || (ci < 5 && cj == 9 - ci) {
-                        // Mirrored between sides.
-                        0.
-                    } else if cj == ci + 1 {
-                        // Next to each other.
-                        0.
-                    } else if ci < cj && (cj < 5 || 5 <= ci) {
-                        // In order on the same side.
-                        1.
-                    } else {
-                        // Somewhere else in the same row.
-                        4.
-                    }
-                } else if ci == cj {
-                    // Same column.
-                    1.
-                } else {
-                    // Different row and column.
-                    4.
-                }
-            }
-        })
-        .sum();
-    let similar_pairs = [
-        ['+', '-'],
-        ['\'', '"'],
-        ['*', '/'],
-        ['*', '&'],
-        ['\\', '/'],
-        ['!', '?'],
-        ['.', ','],
-        ['$', '£'],
-        ['-', '_'],
-        ['-', '~'],
-        ['/', '%'],
-        ['\'', '`'],
-        [';', ':'],
-        ['+', '*'],
-    ];
-    let similar_pair_penalty: f64 = similar_pairs
-        .into_iter()
-        .map(|[i, j]| {
-            let (i0, i1) = char_idx[&i];
-            let (j0, j1) = char_idx[&j];
-            if i0 != j0 {
-                if i1 != j1 {
-                    // Different key and layer.
-                    4.
-                } else {
-                    // Same key, different layer.
-                    1.
-                }
-            } else {
-                // Same layer.
-                let ri = i1 / 10;
-                let ci = i1 % 10;
-                let rj = j1 / 10;
-                let cj = j1 % 10;
-                if ri == rj {
-                    // Same row.
-                    if (ri == 3 && cj == 3 - ci) || (cj == 9 - ci) {
-                        // Mirrored between sides.
-                        0.
-                    } else if cj == ci + 1 || ci == cj + 1 {
-                        // Next to each other.
-                        0.
-                    } else {
-                        // Somewhere else in the same row.
-                        2.
-                    }
-                } else if ci == cj {
-                    // Same column.
-                    0.
-                } else {
-                    // Different row and column.
-                    2.
-                }
-            }
-        })
-        .sum();
-    0.01 * ordered_pair_penalty + 0.002 * similar_pair_penalty
+    0.
 }
+// fn memorability_cost(char_idx: &AHashMap<char, (usize, usize)>) -> f64 {
+//     let ordered_pairs = [['(', ')'], ['{', '}'], ['[', ']'], ['<', '>']];
+//     let ordered_pair_penalty: f64 = ordered_pairs
+//         .into_iter()
+//         .map(|[l, r]| {
+//             let (i0, i1) = char_idx[&l];
+//             let (j0, j1) = char_idx[&r];
+//             if i0 != j0 {
+//                 if i1 != j1 {
+//                     // Different key and layer.
+//                     6.
+//                 } else {
+//                     // Same key, different layer.
+//                     2.
+//                 }
+//             } else {
+//                 // Same layer.
+//                 let ri = i1 / 10;
+//                 let ci = i1 % 10;
+//                 let rj = j1 / 10;
+//                 let cj = j1 % 10;
+//                 if ri == rj {
+//                     // Same row.
+//                     if (ri == 3 && ci < 2 && cj == 3 - ci) || (ci < 5 && cj == 9 - ci) {
+//                         // Mirrored between sides.
+//                         0.
+//                     } else if cj == ci + 1 {
+//                         // Next to each other.
+//                         0.
+//                     } else if ci < cj && (cj < 5 || 5 <= ci) {
+//                         // In order on the same side.
+//                         1.
+//                     } else {
+//                         // Somewhere else in the same row.
+//                         4.
+//                     }
+//                 } else if ci == cj {
+//                     // Same column.
+//                     1.
+//                 } else {
+//                     // Different row and column.
+//                     4.
+//                 }
+//             }
+//         })
+//         .sum();
+//     let similar_pairs = [
+//         ['+', '-'],
+//         ['\'', '"'],
+//         ['*', '/'],
+//         ['*', '&'],
+//         ['\\', '/'],
+//         ['!', '?'],
+//         ['.', ','],
+//         ['$', '£'],
+//         ['-', '_'],
+//         ['-', '~'],
+//         ['/', '%'],
+//         ['\'', '`'],
+//         [';', ':'],
+//         ['+', '*'],
+//     ];
+//     let similar_pair_penalty: f64 = similar_pairs
+//         .into_iter()
+//         .map(|[i, j]| {
+//             let (i0, i1) = char_idx[&i];
+//             let (j0, j1) = char_idx[&j];
+//             if i0 != j0 {
+//                 if i1 != j1 {
+//                     // Different key and layer.
+//                     4.
+//                 } else {
+//                     // Same key, different layer.
+//                     1.
+//                 }
+//             } else {
+//                 // Same layer.
+//                 let ri = i1 / 10;
+//                 let ci = i1 % 10;
+//                 let rj = j1 / 10;
+//                 let cj = j1 % 10;
+//                 if ri == rj {
+//                     // Same row.
+//                     if (ri == 3 && cj == 3 - ci) || (cj == 9 - ci) {
+//                         // Mirrored between sides.
+//                         0.
+//                     } else if cj == ci + 1 || ci == cj + 1 {
+//                         // Next to each other.
+//                         0.
+//                     } else {
+//                         // Somewhere else in the same row.
+//                         2.
+//                     }
+//                 } else if ci == cj {
+//                     // Same column.
+//                     0.
+//                 } else {
+//                     // Different row and column.
+//                     2.
+//                 }
+//             }
+//         })
+//         .sum();
+//     0.01 * ordered_pair_penalty + 0.002 * similar_pair_penalty
+// }
 
 fn cost(
     next_key_cost: &NextKeyCost,
@@ -600,19 +657,19 @@ fn cost(
                 _ => None,
             })
         })
-        .fold([0; 3], |mut a, (n, j)| {
+        .fold([0; NUM_LAYERS], |mut a, (n, j)| {
             a[n] = j;
             a
         });
 
-    // let (t, c) = corpus
-    //     .iter()
-    //     .map(|s| string_cost(&char_idx, layer_idx, next_key_cost, held_key_cost, s))
-    //     .fold((0, 0), |(a0, a1), (b0, b1)| (a0 + b0, a1 + b1));
     let (t, c) = corpus
-        .par_iter()
+        .iter()
         .map(|s| string_cost(&char_idx, layer_idx, next_key_cost, held_key_cost, s))
-        .reduce(|| (0, 0), |(a0, a1), (b0, b1)| (a0 + b0, a1 + b1));
+        .fold((0, 0), |(a0, a1), (b0, b1)| (a0 + b0, a1 + b1));
+    // let (t, c) = corpus
+    //     .par_iter()
+    //     .map(|s| string_cost(&char_idx, layer_idx, next_key_cost, held_key_cost, s))
+    //     .reduce(|| (0, 0), |(a0, a1), (b0, b1)| (a0 + b0, a1 + b1));
 
     t as f64 / c as f64 + similarity_cost(layout) + memorability_cost(&char_idx)
 }
@@ -630,7 +687,7 @@ fn read_corpus_impl<P: AsRef<Path>>(corpus: &mut Vec<String>, path: P) -> io::Re
     Ok(())
 }
 
-fn read_corpus() -> io::Result<Vec<String>> {
+pub fn read_corpus() -> io::Result<Vec<String>> {
     // read_dir(CORPUS_DIR)?
     //     .map(|entry| fs::read_to_string(entry?.path()))
     //     .collect::<io::Result<Vec<_>>>()
@@ -642,10 +699,10 @@ fn read_corpus() -> io::Result<Vec<String>> {
 #[derive(Debug, Clone, Copy)]
 enum Mutation {
     SwapKeys {
-        i0: usize,
-        i1: usize,
-        j0: usize,
-        j1: usize,
+        l0: usize,
+        l1: usize,
+        i: usize,
+        j: usize,
     },
     SwapPaired {
         l0: usize,
@@ -657,81 +714,42 @@ enum Mutation {
 
 impl Mutation {
     fn gen<R: Rng>(mut rng: R, layout: &Layout) -> Self {
-        let mut i0 = rng.gen_range(0..NUM_LAYERS);
-        let mut i1 = rng.gen_range(0..NUM_KEYS);
-        if i1 >= 30 {
+        // let layer = rng.gen_range(0..NUM_LAYERS);
+        let layer = 0;
+        // let i = rng.gen_range(0..NUM_KEYS);
+        let i = rng.gen_range(0..30);
+        if i >= 30 {
             // Move thumb keys around.
-            let j1 = 30 + rng.gen_range(0..4);
-            return Self::SwapKeys {
-                i0: 0,
-                i1,
-                j0: 0,
-                j1,
-            };
+            let j = 30 + rng.gen_range(0..4);
+            return Self::SwapKeys { l0: 0, i, l1: 0, j };
         }
-        if let Key::Char(c) = layout[i0][i1] {
-            if c.is_ascii_alphabetic() {
-                // Move shifted and unshifted version of the key together,
-                // Keeping them on the same layers.
-                let j = rng.gen_range(0..30);
-                // Assume the alphabetic keys are on layers 0 and 1.
-                debug_assert!([0, 1].contains(&i0));
-                return Self::SwapPaired {
-                    l0: 0,
-                    l1: 1,
-                    i: i1,
-                    j,
-                };
-            }
+        if layer == 0 || layer == 1 {
+            // Keep shifted and unshifted layers in sync.
+            let j = rng.gen_range(0..30);
+            return Self::SwapPaired { l0: 0, l1: 1, i, j };
         }
-        let mut j0;
-        let mut j1;
-        // let j1 = rng.gen_range(0..layout[j0].0.len());
-        // Avoid alphabetic characters when performing single key swaps,
-        // to keep them on their layers and in sync with the shifted versions.
-        loop {
-            j0 = rng.gen_range(0..NUM_LAYERS);
-            j1 = rng.gen_range(0..NUM_KEYS - 4);
-            if let Key::Char(c) = layout[j0][j1] {
-                if c.is_ascii_alphabetic() {
-                    continue;
-                }
-            }
-            break;
+        // Keep keys on their own layer.
+        let j = rng.gen_range(0..30);
+        Self::SwapKeys {
+            l0: layer,
+            l1: layer,
+            i,
+            j,
         }
-        // Ensure i0 <= j0 for ease of application.
-        if i0 > j0 {
-            (i0, j0) = (j0, i0);
-            // Necessary to preserve the alphabetic key checks.
-            (i1, j1) = (j1, i1);
-        }
-        Self::SwapKeys { i0, i1, j0, j1 }
     }
 
     fn apply(self, layout: &mut Layout) {
         match self {
-            Self::SwapKeys { i0, i1, j0, j1 } => {
-                debug_assert!(if let Key::Char(c) = layout[i0][i1] {
-                    !c.is_ascii_alphabetic()
-                } else {
-                    true
-                });
-                debug_assert!(if let Key::Char(c) = layout[j0][j1] {
-                    !c.is_ascii_alphabetic()
-                } else {
-                    true
-                });
-                if i0 == j0 {
-                    layout[i0].0.swap(i1, j1);
+            Self::SwapKeys { l0, i, l1, j } => {
+                assert!(l0 <= l1);
+                if l0 == l1 {
+                    layout[l0].0.swap(i, j);
                     return;
                 }
                 // Split the layers so we can safely have mutable references
                 // to two parts of it.
-                let (left, right) = layout.layers.split_at_mut(i0 + 1);
-                std::mem::swap(
-                    &mut left.last_mut().unwrap()[i1],
-                    &mut right[j0 - i0 - 1][j1],
-                );
+                let (left, right) = layout.layers.split_at_mut(l0 + 1);
+                std::mem::swap(&mut left.last_mut().unwrap()[i], &mut right[l1 - l0 - 1][j]);
             }
             Self::SwapPaired { l0, l1, i, j } => {
                 layout[l0].0.swap(i, j);
@@ -745,16 +763,14 @@ impl Mutation {
     }
 }
 
-const N: u32 = 10000;
-const T0: f64 = 30.;
+// const N: u32 = 50000;
+const T0: f64 = 20.;
 const K: f64 = 10.;
 const P0: f64 = 1.;
 
 /// Optimise the layout using simulated annealing.
-pub fn optimise(mut layout: Layout) -> io::Result<Layout> {
+pub fn optimise(n: u32, mut layout: Layout, corpus: &[String]) -> (Layout, f64) {
     assert!(layout.is_satisfactory());
-
-    let corpus = read_corpus()?;
 
     let next_key_cost = Layer(
         (0..NUM_KEYS)
@@ -791,18 +807,17 @@ pub fn optimise(mut layout: Layout) -> io::Result<Layout> {
     let mut rng = thread_rng();
     let initial_energy = cost(&next_key_cost, &held_key_cost, &corpus, &layout);
     let mut energy = initial_energy;
-    eprintln!("energy = {}", energy);
-    for i in 0..N {
+    // eprintln!("energy = {}", energy);
+    for i in 0..n {
         let mutation = Mutation::gen(&mut rng, &layout);
         mutation.apply(&mut layout);
         // The mutation shouldn't change this invariant.
         debug_assert!(layout.is_satisfactory());
         let new_energy = cost(&next_key_cost, &held_key_cost, &corpus, &layout);
         match new_energy.partial_cmp(&energy).unwrap() {
-            cmp::Ordering::Less => {}
-            cmp::Ordering::Equal => {}
+            cmp::Ordering::Less | cmp::Ordering::Equal => {}
             cmp::Ordering::Greater => {
-                let temperature = T0 * (-K * i as f64 / N as f64).exp();
+                let temperature = T0 * (-K * i as f64 / n as f64).exp();
                 let p = P0 * ((energy - new_energy) / temperature).exp();
                 if !rng.gen_bool(p) {
                     mutation.undo(&mut layout);
@@ -811,8 +826,8 @@ pub fn optimise(mut layout: Layout) -> io::Result<Layout> {
             }
         }
         energy = new_energy;
-        eprintln!("iteration {}, energy = {}", i, energy);
+        // eprintln!("iteration {}, energy = {}", i, energy);
     }
-    eprintln!("improvement: {}", initial_energy - energy);
-    Ok(layout)
+    // eprintln!("improvement: {}", initial_energy - energy);
+    (layout, initial_energy - energy)
 }

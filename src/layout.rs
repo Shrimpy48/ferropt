@@ -5,10 +5,10 @@ use std::fmt;
 use std::ops::{Index, IndexMut};
 
 const REQUIRED_CHARS: &str =
-    "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ,.'\"?!;:\\/<>[]{}()|#@~$&*^+%£`-_= ";
+    "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ,.'\"?!;:\\/<>[]{}()|#@~$&*^+%£`-_= 0123456789";
 
 pub const NUM_KEYS: usize = 34;
-pub const NUM_LAYERS: usize = 3;
+pub const NUM_LAYERS: usize = 4;
 
 pub const DEFAULT_LAYOUT: Layout = Layout {
     layers: [
@@ -46,7 +46,7 @@ pub const DEFAULT_LAYOUT: Layout = Layout {
             Key::Layer(1),
             Key::Char(' '),
             Key::Layer(2),
-            Key::Empty,
+            Key::Layer(3),
         ]),
         Layer([
             Key::Char('Q'),
@@ -120,38 +120,42 @@ pub const DEFAULT_LAYOUT: Layout = Layout {
             Key::Empty,
             Key::Empty,
         ]),
-        // Layer([
-        //     Key::Empty,
-        //     Key::Char('7'),
-        //     Key::Char('8'),
-        //     Key::Char('9'),
-        //     Key::Empty,
-        //     Key::Empty,
-        //     Key::Empty,
-        //     Key::Empty,
-        //     Key::Empty,
-        //     Key::Empty,
-        //     Key::Char('0'),
-        //     Key::Char('1'),
-        //     Key::Char('2'),
-        //     Key::Char('3'),
-        //     Key::Empty,
-        //     Key::Empty,
-        //     Key::Empty,
-        //     Key::Empty,
-        //     Key::Empty,
-        //     Key::Empty,
-        //     Key::Empty,
-        //     Key::Char('4'),
-        //     Key::Char('5'),
-        //     Key::Char('6'),
-        //     Key::Empty,
-        //     Key::Empty,
-        //     Key::Empty,
-        //     Key::Empty,
-        //     Key::Empty,
-        //     Key::Empty,
-        // ]),
+        Layer([
+            Key::Empty,
+            Key::Char('7'),
+            Key::Char('8'),
+            Key::Char('9'),
+            Key::Empty,
+            Key::Empty,
+            Key::Empty,
+            Key::Empty,
+            Key::Empty,
+            Key::Empty,
+            Key::Char('0'),
+            Key::Char('1'),
+            Key::Char('2'),
+            Key::Char('3'),
+            Key::Empty,
+            Key::Empty,
+            Key::Empty,
+            Key::Empty,
+            Key::Empty,
+            Key::Empty,
+            Key::Empty,
+            Key::Char('4'),
+            Key::Char('5'),
+            Key::Char('6'),
+            Key::Empty,
+            Key::Empty,
+            Key::Empty,
+            Key::Empty,
+            Key::Empty,
+            Key::Empty,
+            Key::Empty,
+            Key::Empty,
+            Key::Empty,
+            Key::Empty,
+        ]),
     ],
 };
 
