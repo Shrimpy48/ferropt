@@ -805,7 +805,7 @@ pub fn optimise(n: u32, mut layout: Layout, corpus: &[String]) -> (Layout, f64) 
     );
 
     let mut rng = thread_rng();
-    let initial_energy = cost(&next_key_cost, &held_key_cost, &corpus, &layout);
+    let initial_energy = cost(&next_key_cost, &held_key_cost, corpus, &layout);
     let mut energy = initial_energy;
     // eprintln!("energy = {}", energy);
     for i in 0..n {
@@ -813,7 +813,7 @@ pub fn optimise(n: u32, mut layout: Layout, corpus: &[String]) -> (Layout, f64) 
         mutation.apply(&mut layout);
         // The mutation shouldn't change this invariant.
         debug_assert!(layout.is_satisfactory());
-        let new_energy = cost(&next_key_cost, &held_key_cost, &corpus, &layout);
+        let new_energy = cost(&next_key_cost, &held_key_cost, corpus, &layout);
         match new_energy.partial_cmp(&energy).unwrap() {
             cmp::Ordering::Less | cmp::Ordering::Equal => {}
             cmp::Ordering::Greater => {

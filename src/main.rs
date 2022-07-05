@@ -10,13 +10,12 @@ use std::fs::File;
 use std::io;
 use std::time::Instant;
 
-use crate::layout::DEFAULT_LAYOUT;
-
 const TRIALS: usize = 16;
 
 fn main() -> io::Result<()> {
-    let layout = DEFAULT_LAYOUT;
-    // eprintln!("{}", serde_json::to_string_pretty(&layout)?);
+    let f = File::open("initial.json")?;
+    let layout = serde_json::from_reader(f)?;
+    eprintln!("{}", serde_json::to_string_pretty(&layout)?);
 
     let corpus = read_corpus()?;
 
@@ -37,7 +36,7 @@ fn main() -> io::Result<()> {
 fn run_trials(n: u32, corpus: &[String], layout: &Layout) -> (Layout, f64) {
     let start = Instant::now();
     let results: Vec<_> = iter::repeatn(layout, TRIALS)
-        .map(|l| optimise(n, l.clone(), &corpus))
+        .map(|l| optimise(n, l.clone(), corpus))
         .collect();
 
     let mean = results.iter().map(|(_, i)| i).sum::<f64>() / TRIALS as f64;

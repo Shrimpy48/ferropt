@@ -17,3 +17,5 @@ serde = { version = "1.0", features = [ "derive" ] }
 serde_json = "1.0"
 rayon = "1.5"
 ahash = { version = "0.7", features = [ "serde" ] }
+regex = "1.5.6"
+lazy_static = "1.4.0"
