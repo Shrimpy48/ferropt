@@ -19,3 +19,5 @@ rayon = "1.5"
 ahash = { version = "0.7", features = [ "serde" ] }
 regex = "1.5.6"
 lazy_static = "1.4.0"
+# sprog = { path = "../sprog" }
+indicatif = { version = "0.16.2", features = ["with_rayon"] }

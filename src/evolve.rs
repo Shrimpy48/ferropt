@@ -713,11 +713,35 @@ enum Mutation {
 }
 
 impl Mutation {
+    // fn gen<R: Rng>(mut rng: R, layout: &Layout) -> Self {
+    //     let layer = rng.gen_range(0..NUM_LAYERS);
+    //     let i = rng.gen_range(0..NUM_KEYS);
+    //     if matches!(layout[layer][i], Key::Layer(_)) {
+    //         debug_assert_eq!(layer, 0);
+    //         // Keep layer switch keys on home layer
+    //         // to ensure every layer can be accessed.
+    //         let j = rng.gen_range(0..NUM_KEYS);
+    //         Self::SwapKeys { l0: 0, l1: 0, i, j }
+    //     } else {
+    //         let layer2 = rng.gen_range(0..NUM_LAYERS);
+    //         let j = loop {
+    //             let j = rng.gen_range(0..30);
+    //             if !matches!(layout[layer2][j], Key::Layer(_)) {
+    //                 break j;
+    //             }
+    //         };
+    //         Self::SwapKeys {
+    //             l0: layer,
+    //             l1: layer2,
+    //             i,
+    //             j,
+    //         }
+    //     }
+    // }
+
     fn gen<R: Rng>(mut rng: R, layout: &Layout) -> Self {
-        // let layer = rng.gen_range(0..NUM_LAYERS);
-        let layer = 0;
-        // let i = rng.gen_range(0..NUM_KEYS);
-        let i = rng.gen_range(0..30);
+        let layer = rng.gen_range(0..NUM_LAYERS);
+        let i = rng.gen_range(0..NUM_KEYS);
         if i >= 30 {
             // Move thumb keys around.
             let j = 30 + rng.gen_range(0..4);
@@ -740,11 +764,18 @@ impl Mutation {
 
     fn apply(self, layout: &mut Layout) {
         match self {
-            Self::SwapKeys { l0, i, l1, j } => {
-                assert!(l0 <= l1);
+            Self::SwapKeys {
+                mut l0,
+                mut i,
+                mut l1,
+                mut j,
+            } => {
                 if l0 == l1 {
                     layout[l0].0.swap(i, j);
                     return;
+                }
+                if l0 > l1 {
+                    (l0, i, l1, j) = (l1, j, l0, i);
                 }
                 // Split the layers so we can safely have mutable references
                 // to two parts of it.
@@ -769,9 +800,12 @@ const K: f64 = 10.;
 const P0: f64 = 1.;
 
 /// Optimise the layout using simulated annealing.
-pub fn optimise(n: u32, mut layout: Layout, corpus: &[String]) -> (Layout, f64) {
-    assert!(layout.is_satisfactory());
-
+pub fn optimise(
+    n: u32,
+    mut layout: Layout,
+    corpus: &[String],
+    mut progress_callback: impl FnMut(u32),
+) -> (Layout, f64) {
     let next_key_cost = Layer(
         (0..NUM_KEYS)
             .map(|i| {
@@ -809,10 +843,9 @@ pub fn optimise(n: u32, mut layout: Layout, corpus: &[String]) -> (Layout, f64) 
     let mut energy = initial_energy;
     // eprintln!("energy = {}", energy);
     for i in 0..n {
+        progress_callback(i);
         let mutation = Mutation::gen(&mut rng, &layout);
         mutation.apply(&mut layout);
-        // The mutation shouldn't change this invariant.
-        debug_assert!(layout.is_satisfactory());
         let new_energy = cost(&next_key_cost, &held_key_cost, corpus, &layout);
         match new_energy.partial_cmp(&energy).unwrap() {
             cmp::Ordering::Less | cmp::Ordering::Equal => {}

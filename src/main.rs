@@ -1,4 +1,5 @@
 mod evolve;
+
 mod layout;
 
 use evolve::*;
@@ -9,6 +10,8 @@ use rayon::prelude::*;
 use std::fs::File;
 use std::io;
 use std::time::Instant;
+
+use indicatif::{MultiProgress, ProgressBar};
 
 const TRIALS: usize = 16;
 
@@ -35,9 +38,37 @@ fn main() -> io::Result<()> {
 
 fn run_trials(n: u32, corpus: &[String], layout: &Layout) -> (Layout, f64) {
     let start = Instant::now();
-    let results: Vec<_> = iter::repeatn(layout, TRIALS)
-        .map(|l| optimise(n, l.clone(), corpus))
+
+    let multiprog = MultiProgress::new();
+    multiprog.set_move_cursor(true);
+
+    let bars: Vec<_> = std::iter::repeat_with(|| multiprog.add(ProgressBar::new(n.into())))
+        .take(TRIALS)
         .collect();
+
+    for bar in bars.iter() {
+        bar.set_position(0);
+    }
+
+    let (_, results): (_, Vec<_>) = rayon::join(
+        || multiprog.join_and_clear().unwrap(),
+        || {
+            iter::repeatn(layout, TRIALS)
+                .zip(bars)
+                .map(|(l, bar)| {
+                    let res = optimise(n, l.clone(), corpus, |i| bar.set_position(i.into()));
+                    bar.finish();
+                    res
+                })
+                .collect()
+        },
+    );
+
+    // let mut bar = ProgressBar::new(n.into());
+    // let results = vec![optimise(n, layout.clone(), corpus, |i| {
+    //     bar.set_position(i.into())
+    // })];
+    // bar.finish();
 
     let mean = results.iter().map(|(_, i)| i).sum::<f64>() / TRIALS as f64;
     let var = results.iter().map(|(_, i)| (i - mean).powi(2)).sum::<f64>() / TRIALS as f64;

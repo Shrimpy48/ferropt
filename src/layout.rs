@@ -8,9 +8,6 @@ use std::str::FromStr;
 use lazy_static::lazy_static;
 use regex::Regex;
 
-const REQUIRED_CHARS: &str =
-    "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ,.'\"?!;:\\/<>[]{}()|#@~$&*^+%£`-_= 0123456789";
-
 pub const NUM_KEYS: usize = 34;
 pub const NUM_LAYERS: usize = 4;
 
@@ -314,7 +311,7 @@ impl FromStr for Key {
             s => {
                 let cap = KC_RE
                     .captures(s)
-                    .ok_or(ParseError::UnknownValue(s.to_string()))?;
+                    .ok_or_else(|| ParseError::UnknownValue(s.to_string()))?;
                 if let Some(c) = cap.name("upper") {
                     let c = c.as_str().chars().next().unwrap();
                     Ok(Self::Char(c))
@@ -420,10 +417,6 @@ impl Layout {
         self.layers.iter()
     }
 
-    pub fn is_satisfactory(&self) -> bool {
-        REQUIRED_CHARS.chars().all(|c| self.has_key(Key::Char(c)))
-    }
-
     fn has_key(&self, key: Key) -> bool {
         self.iter().any(|l| l.iter().any(|&k| k == key))
     }
@@ -471,7 +464,7 @@ impl TryFrom<serde_json::Value> for Layout {
                 }
                 let layers = map
                     .get("layers")
-                    .ok_or(ParseError::MissingValue("layers".into()))
+                    .ok_or_else(|| ParseError::MissingValue("layers".into()))
                     .and_then(|ls| match ls {
                         serde_json::Value::Array(v) => v
                             .iter()
@@ -485,7 +478,7 @@ impl TryFrom<serde_json::Value> for Layout {
                             }),
                         _ => Err(ParseError::WrongType {
                             expected: discriminant(&serde_json::Value::Array(Vec::new())),
-                            found: discriminant(&ls),
+                            found: discriminant(ls),
                         }),
                     })?;
                 Ok(Self { layers })
