@@ -1,6 +1,7 @@
+mod cost;
 mod evolve;
-
 mod layout;
+mod simple_cost;
 
 use evolve::*;
 use layout::*;
@@ -11,9 +12,9 @@ use std::fs::File;
 use std::io;
 use std::time::Instant;
 
-use indicatif::{MultiProgress, ProgressBar};
+use indicatif::{HumanDuration, MultiProgress, ProgressBar};
 
-const TRIALS: usize = 16;
+const TRIALS: usize = 21;
 
 fn main() -> io::Result<()> {
     let f = File::open("initial.json")?;
@@ -24,7 +25,7 @@ fn main() -> io::Result<()> {
 
     let mut best = 0.;
 
-    for n in [100, 1_000, 2_500, 5_000, 10_000, 25_000, 50_000] {
+    for n in [100, 1_000, 5_000] {
         let (l, score) = run_trials(n, &corpus, &layout);
         if score > best {
             best = score;
@@ -70,6 +71,8 @@ fn run_trials(n: u32, corpus: &[String], layout: &Layout) -> (Layout, f64) {
     // })];
     // bar.finish();
 
+    // let results = vec![optimise(n, layout.clone(), corpus, |_i| {})];
+
     let mean = results.iter().map(|(_, i)| i).sum::<f64>() / TRIALS as f64;
     let var = results.iter().map(|(_, i)| (i - mean).powi(2)).sum::<f64>() / TRIALS as f64;
     let std_dev = var.sqrt();
@@ -80,12 +83,12 @@ fn run_trials(n: u32, corpus: &[String], layout: &Layout) -> (Layout, f64) {
         .unwrap();
 
     eprintln!(
-        "N = {:6}: μ = {:6.3}, σ = {:6.3}, best = {:6.3} in {:.1?}",
+        "N = {:6}: μ = {:6.3}, σ = {:6.3}, best = {:6.3} in {}",
         n,
         mean,
         std_dev,
         best.1,
-        start.elapsed(),
+        HumanDuration(start.elapsed()),
     );
 
     best

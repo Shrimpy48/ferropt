@@ -21,3 +21,4 @@ regex = "1.5.6"
 lazy_static = "1.4.0"
 # sprog = { path = "../sprog" }
 indicatif = { version = "0.16.2", features = ["with_rayon"] }
+enum-map = "2.4.0"
