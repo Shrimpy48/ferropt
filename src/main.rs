@@ -1,3 +1,7 @@
+#[cfg(feature = "dhat-heap")]
+#[global_allocator]
+static ALLOC: dhat::Alloc = dhat::Alloc;
+
 mod cost;
 mod evolve;
 mod layout;
@@ -14,9 +18,15 @@ use std::time::Instant;
 
 use indicatif::{HumanDuration, MultiProgress, ProgressBar};
 
-const TRIALS: usize = 4;
+const TRIALS: usize = 14;
 
 fn main() -> io::Result<()> {
+    #[cfg(feature = "dhat-heap")]
+    let _profiler = dhat::Profiler::new_heap();
+
+    #[cfg(feature = "dhat-ad-hoc")]
+    let _profiler = dhat::Profiler::new_ad_hoc();
+
     let f = File::open("initial.json")?;
     let layout = serde_json::from_reader(f)?;
     eprintln!("{}", serde_json::to_string_pretty(&layout)?);
@@ -26,8 +36,9 @@ fn main() -> io::Result<()> {
     let mut best = 0.;
 
     // for n in [100, 1_000, 10_000, 100_000, 200_000, 300_000, 400_000, 500_000] {
-    for n in 1..1000 {
-        let n = n * 1000;
+    // for n in 1..1000 {
+        // let n = n * 1000;
+    for n in [100] {
         let (l, score) = run_trials(n, &corpus, &layout);
         if score > best {
             best = score;
@@ -42,30 +53,30 @@ fn main() -> io::Result<()> {
 fn run_trials(n: u32, corpus: &[String], layout: &Layout) -> (Layout, f64) {
     let start = Instant::now();
 
-    let multiprog = MultiProgress::new();
-    multiprog.set_move_cursor(true);
+    // let multiprog = MultiProgress::new();
+    // multiprog.set_move_cursor(true);
 
-    let bars: Vec<_> = std::iter::repeat_with(|| multiprog.add(ProgressBar::new(n.into())))
-        .take(TRIALS)
-        .collect();
+    // let bars: Vec<_> = std::iter::repeat_with(|| multiprog.add(ProgressBar::new(n.into())))
+    //     .take(TRIALS)
+    //     .collect();
 
-    for bar in bars.iter() {
-        bar.set_position(0);
-    }
+    // for bar in bars.iter() {
+    //     bar.set_position(0);
+    // }
 
-    let (_, results): (_, Vec<_>) = rayon::join(
-        || multiprog.join_and_clear().unwrap(),
-        || {
-            iter::repeatn(layout, TRIALS)
-                .zip(bars)
-                .map(|(l, bar)| {
-                    let res = optimise(n, l.clone(), corpus, |i| bar.set_position(i.into()));
-                    bar.finish();
-                    res
-                })
-                .collect()
-        },
-    );
+    // let (_, results): (_, Vec<_>) = rayon::join(
+    //     || multiprog.join_and_clear().unwrap(),
+    //     || {
+    //         iter::repeatn(layout, TRIALS)
+    //             .zip(bars)
+    //             .map(|(l, bar)| {
+    //                 let res = optimise(n, l.clone(), corpus, |i| bar.set_position(i.into()));
+    //                 bar.finish();
+    //                 res
+    //             })
+    //             .collect()
+    //     },
+    // );
 
     // let mut bar = ProgressBar::new(n.into());
     // let results = vec![optimise(n, layout.clone(), corpus, |i| {
@@ -73,7 +84,7 @@ fn run_trials(n: u32, corpus: &[String], layout: &Layout) -> (Layout, f64) {
     // })];
     // bar.finish();
 
-    // let results = vec![optimise(n, layout.clone(), corpus, |_i| {})];
+    let results = vec![optimise(n, layout.clone(), corpus, |_i| {})];
 
     let mean = results.iter().map(|(_, i)| i).sum::<f64>() / TRIALS as f64;
     let var = results.iter().map(|(_, i)| (i - mean).powi(2)).sum::<f64>() / TRIALS as f64;

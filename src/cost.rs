@@ -1,8 +1,8 @@
 use lazy_static::lazy_static;
 
 use crate::{
-    evolve::{CharIdx, TypingEvent},
-    layout::{finger_for_pos, Digit, Finger, Hand, Layer, Layout, NUM_KEYS, NUM_LAYERS},
+    evolve::{AnnotatedLayout, CharIdx, TypingEvent},
+    layout::{finger_for_pos, Digit, Finger, Hand, Layer, NUM_KEYS},
 };
 
 #[rustfmt::skip]
@@ -143,7 +143,7 @@ fn ulog2(x: usize) -> u8 {
     if shift == 0 {
         0
     } else {
-        debug_assert!(shift - 1 <= u8::MAX.into());
+        assert!(shift - 1 <= u8::MAX.into());
         (shift - 1) as u8
     }
 }
@@ -256,7 +256,7 @@ pub fn cost_of_typing(keys: impl Iterator<Item = TypingEvent>) -> (u64, u64) {
     (total_cost, count)
 }
 
-fn similarity_cost(layout: &Layout, _char_idx: &CharIdx) -> f64 {
+fn similarity_cost(layout: &AnnotatedLayout) -> f64 {
     0.
     // layout.hamming_dist(&DEFAULT_LAYOUT) as f64 / (NUM_KEYS * NUM_LAYERS) as f64 * 0.5
 }
@@ -264,18 +264,13 @@ fn similarity_cost(layout: &Layout, _char_idx: &CharIdx) -> f64 {
 // fn memorability_cost(_layout: &Layout, char_idx: &CharIdx) -> f64 {
 //     0.
 // }
-fn memorability_cost(
-    layout: &Layout,
-    char_idx: &CharIdx,
-    layer_idx: [usize; NUM_LAYERS],
-    shift_idx: Option<usize>,
-) -> f64 {
+fn memorability_cost(layout: &AnnotatedLayout) -> f64 {
     let ordered_pairs = [['(', ')'], ['{', '}'], ['[', ']'], ['<', '>']];
     let ordered_pair_penalty: f64 = ordered_pairs
         .into_iter()
         .filter_map(|[l, r]| {
-            let l = char_idx.get(&l)?;
-            let r = char_idx.get(&r)?;
+            let l = layout.char_idx().get(&l)?;
+            let r = layout.char_idx().get(&r)?;
             Some(if l.layer != r.layer || l.shifted != r.shifted {
                 if l.pos != r.pos {
                     // Different key and layer.
@@ -337,8 +332,8 @@ fn memorability_cost(
     let similar_pair_penalty: f64 = similar_pairs
         .into_iter()
         .filter_map(|[a, b]| {
-            let a = char_idx.get(&a)?;
-            let b = char_idx.get(&b)?;
+            let a = layout.char_idx().get(&a)?;
+            let b = layout.char_idx().get(&b)?;
             Some(if a.layer != b.layer || a.shifted != b.shifted {
                 if a.pos != b.pos {
                     // Different key and layer.
@@ -376,17 +371,17 @@ fn memorability_cost(
             })
         })
         .sum();
-    let space_penalty = match char_idx[&' '].pos {
+    let space_penalty = match layout.char_idx()[&' '].pos {
         31 => 0.,
         32 => 1.,
         _ => 3.,
     };
-    let shift_penalty = match shift_idx {
+    let shift_penalty = match layout.shift_idx() {
         None | Some(30 | 31 | 32 | 33) => 0.,
         _ => 2.,
     };
     let mut layer_penalty = 0.;
-    for l in layer_idx.into_iter().skip(1) {
+    for l in layout.layer_idx().iter().skip(1) {
         layer_penalty += match l {
             30 | 31 | 32 | 33 => 0.,
             _ => 2.,
@@ -410,14 +405,14 @@ fn memorability_cost(
     let lines = ['-', '_', '\\', '|', '/', '~'];
     0.01 * ordered_pair_penalty
         + 0.002 * similar_pair_penalty
-        + 0.01 * layer_variation(char_idx, lower_alpha)
-        + 0.01 * layer_variation(char_idx, upper_alpha)
-        + 0.01 * layer_variation(char_idx, numbers)
-        + 0.002 * layer_variation(char_idx, maths_symbols)
-        + 0.002 * layer_variation(char_idx, brackets)
-        + 0.002 * layer_variation(char_idx, quotes)
-        + 0.002 * layer_variation(char_idx, punctuation)
-        + 0.002 * layer_variation(char_idx, lines)
+        + 0.01 * layer_variation(layout.char_idx(), lower_alpha)
+        + 0.01 * layer_variation(layout.char_idx(), upper_alpha)
+        + 0.01 * layer_variation(layout.char_idx(), numbers)
+        + 0.002 * layer_variation(layout.char_idx(), maths_symbols)
+        + 0.002 * layer_variation(layout.char_idx(), brackets)
+        + 0.002 * layer_variation(layout.char_idx(), quotes)
+        + 0.002 * layer_variation(layout.char_idx(), punctuation)
+        + 0.002 * layer_variation(layout.char_idx(), lines)
         + 0.1 * space_penalty
         + 0.1 * shift_penalty
         + 0.1 * layer_penalty
@@ -441,11 +436,6 @@ fn layer_variation(char_idx: &CharIdx, chars: impl IntoIterator<Item = char>) ->
     num_different as f64 / layers.len() as f64
 }
 
-pub fn layout_cost(
-    layout: &Layout,
-    char_idx: &CharIdx,
-    layer_idx: [usize; NUM_LAYERS],
-    shift_idx: Option<usize>,
-) -> f64 {
-    similarity_cost(layout, char_idx) + memorability_cost(layout, char_idx, layer_idx, shift_idx)
+pub fn layout_cost(layout: &AnnotatedLayout) -> f64 {
+    similarity_cost(layout) + memorability_cost(layout)
 }

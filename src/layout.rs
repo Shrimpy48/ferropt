@@ -17,13 +17,14 @@ lazy_static! {
         Regex::new(r"^LSFT\((?P<shifted>[^()]+)\)|OSL\((?P<layer>\d+)\)$",).unwrap();
 }
 
-pub const HOMING: [KeyCode; 6] = [
+pub const HOMING: [KeyCode; 7] = [
     KeyCode::F,
     KeyCode::J,
     KeyCode::T,
     KeyCode::N,
     KeyCode::U,
     KeyCode::H,
+    KeyCode::Space,
 ];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

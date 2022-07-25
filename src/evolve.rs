@@ -131,15 +131,10 @@ fn key_seq(
     out.into_iter()
 }
 
-pub fn string_cost(
-    char_idx: &CharIdx,
-    layer_idx: [usize; NUM_LAYERS],
-    shift_idx: Option<usize>,
-    string: &str,
-) -> (u64, u64) {
-    let keys = keys(char_idx, string.chars());
+pub fn string_cost(layout: &AnnotatedLayout, string: &str) -> (u64, u64) {
+    let keys = keys(&layout.char_idx, string.chars());
 
-    let events = key_seq(layer_idx, shift_idx, keys);
+    let events = key_seq(layout.layer_idx, layout.shift_idx, keys);
 
     cost_of_typing(events)
 }
@@ -147,73 +142,115 @@ pub fn string_cost(
 // Assumes there is only one intended way of typing each character.
 pub type CharIdx = AHashMap<char, CharIdxEntry>;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CharIdxEntry {
     pub layer: usize,
     pub pos: usize,
     pub shifted: bool,
 }
 
-fn cost(corpus: &[String], layout: &Layout) -> f64 {
-    let mut char_idx: AHashMap<_, _> = layout
-        .iter()
-        .enumerate()
-        .flat_map(|(i, l)| {
+#[derive(Debug, Clone)]
+pub struct AnnotatedLayout {
+    layout: Layout,
+    char_idx: CharIdx,
+    layer_idx: [usize; NUM_LAYERS],
+    shift_idx: Option<usize>,
+}
+
+impl AnnotatedLayout {
+    pub fn layout(&self) -> &Layout {
+        &self.layout
+    }
+
+    pub fn char_idx(&self) -> &CharIdx {
+        &self.char_idx
+    }
+
+    pub fn layer_idx(&self) -> &[usize; NUM_LAYERS] {
+        &self.layer_idx
+    }
+
+    pub fn shift_idx(&self) -> &Option<usize> {
+        &self.shift_idx
+    }
+}
+
+impl From<Layout> for AnnotatedLayout {
+    fn from(layout: Layout) -> Self {
+        let mut char_idx: AHashMap<_, _> = layout
+            .iter()
+            .enumerate()
+            .flat_map(|(i, l)| {
+                l.iter().enumerate().filter_map(move |(j, k)| {
+                    k.typed_char(true).map(|c| {
+                        (
+                            c,
+                            CharIdxEntry {
+                                layer: i,
+                                pos: j,
+                                shifted: true,
+                            },
+                        )
+                    })
+                })
+            })
+            .collect();
+        char_idx.extend(layout.iter().enumerate().flat_map(|(i, l)| {
             l.iter().enumerate().filter_map(move |(j, k)| {
-                k.typed_char(true).map(|c| {
+                k.typed_char(false).map(|c| {
                     (
                         c,
                         CharIdxEntry {
                             layer: i,
                             pos: j,
-                            shifted: true,
+                            shifted: false,
                         },
                     )
                 })
             })
-        })
-        .collect();
-    char_idx.extend(layout.iter().enumerate().flat_map(|(i, l)| {
-        l.iter().enumerate().filter_map(move |(j, k)| {
-            k.typed_char(false).map(|c| {
-                (
-                    c,
-                    CharIdxEntry {
-                        layer: i,
-                        pos: j,
-                        shifted: false,
-                    },
-                )
+        }));
+
+        let layer_idx = layout[0]
+            .iter()
+            .enumerate()
+            .filter_map(move |(j, k)| match k {
+                Key::Layer(n) => Some((*n, j)),
+                _ => None,
             })
-        })
-    }));
+            .fold([0; NUM_LAYERS], |mut a, (n, j)| {
+                a[n] = j;
+                a
+            });
+        let shift_idx = layout[0]
+            .iter()
+            .enumerate()
+            .find_map(|(i, k)| matches!(k, Key::Shift).then_some(i));
+        Self {
+            layout,
+            char_idx,
+            layer_idx,
+            shift_idx,
+        }
+    }
+}
 
-    let layer_idx = layout[0]
-        .iter()
-        .enumerate()
-        .filter_map(move |(j, k)| match k {
-            Key::Layer(n) => Some((*n, j)),
-            _ => None,
-        })
-        .fold([0; NUM_LAYERS], |mut a, (n, j)| {
-            a[n] = j;
-            a
-        });
-    let shift_idx = layout[0]
-        .iter()
-        .enumerate()
-        .find_map(|(i, k)| matches!(k, Key::Shift).then_some(i));
+impl From<AnnotatedLayout> for Layout {
+    fn from(layout: AnnotatedLayout) -> Self {
+        layout.layout
+    }
+}
 
+fn cost(corpus: &[String], layout: &AnnotatedLayout) -> f64 {
     let (t, c) = corpus
         .iter()
-        .map(|s| string_cost(&char_idx, layer_idx, shift_idx, s))
+        .map(|s| string_cost(layout, s))
         .fold((0, 0), |(a0, a1), (b0, b1)| (a0 + b0, a1 + b1));
     // let (t, c) = corpus
     //     .par_iter()
     //     .map(|s| string_cost(&char_idx, layer_idx, next_key_cost, held_key_cost, s))
     //     .reduce(|| (0, 0), |(a0, a1), (b0, b1)| (a0 + b0, a1 + b1));
 
-    t as f64 / c as f64 + layout_cost(layout, &char_idx, layer_idx, shift_idx)
+    t as f64 / c as f64 + layout_cost(layout)
 }
 
 fn read_corpus_impl<P: AsRef<Path>>(corpus: &mut Vec<String>, path: P) -> io::Result<()> {
@@ -252,11 +289,11 @@ enum Mutation {
 }
 
 impl Mutation {
-    fn gen<R: Rng>(mut rng: R, layout: &Layout) -> Self {
+    fn gen<R: Rng>(mut rng: R, layout: &AnnotatedLayout) -> Self {
         let layer = rng.gen_range(0..NUM_LAYERS);
         let i = rng.gen_range(0..NUM_KEYS);
-        if matches!(layout[layer][i], Key::Layer(_) | Key::Shift) {
-            debug_assert_eq!(layer, 0);
+        if matches!(layout.layout[layer][i], Key::Layer(_) | Key::Shift) {
+            assert_eq!(layer, 0);
             // Keep layer switch keys on home layer
             // to ensure every layer can be accessed.
             let j = rng.gen_range(0..NUM_KEYS);
@@ -265,7 +302,7 @@ impl Mutation {
             let layer2 = rng.gen_range(0..NUM_LAYERS);
             let j = loop {
                 let j = rng.gen_range(0..NUM_KEYS);
-                if !matches!(layout[layer2][j], Key::Layer(_) | Key::Shift) {
+                if !matches!(layout.layout[layer2][j], Key::Layer(_) | Key::Shift) {
                     break j;
                 }
             };
@@ -278,7 +315,7 @@ impl Mutation {
         }
     }
 
-    fn apply(self, layout: &mut Layout) {
+    fn apply(self, layout: &mut AnnotatedLayout) {
         match self {
             Self::SwapKeys {
                 mut l0,
@@ -286,8 +323,58 @@ impl Mutation {
                 mut l1,
                 mut j,
             } => {
+                let a = layout.layout[l0][i];
+                let b = layout.layout[l1][j];
+
+                if let Some(c) = a.typed_char(false) {
+                    let entry = layout.char_idx.get_mut(&c).unwrap();
+                    assert_eq!(entry.layer, l0);
+                    assert_eq!(entry.pos, i);
+                    assert!(!entry.shifted);
+                    entry.layer = l1;
+                    entry.pos = j;
+                }
+                if let Some(c) = b.typed_char(false) {
+                    let entry = layout.char_idx.get_mut(&c).unwrap();
+                    assert_eq!(entry.layer, l1);
+                    assert_eq!(entry.pos, j);
+                    assert!(!entry.shifted);
+                    entry.layer = l0;
+                    entry.pos = i;
+                }
+                if let Some(c) = a.typed_char(true) {
+                    let entry = layout.char_idx.get_mut(&c).unwrap();
+                    if entry.layer == l0 && entry.pos == i && entry.shifted {
+                        entry.layer = l1;
+                        entry.pos = j;
+                    }
+                }
+                if let Some(c) = b.typed_char(true) {
+                    let entry = layout.char_idx.get_mut(&c).unwrap();
+                    if entry.layer == l1 && entry.pos == j && entry.shifted {
+                        entry.layer = l0;
+                        entry.pos = i;
+                    }
+                }
+                if let Key::Layer(layer) = a {
+                    assert_eq!(layout.layer_idx[layer], i);
+                    layout.layer_idx[layer] = j;
+                }
+                if let Key::Layer(layer) = b {
+                    assert_eq!(layout.layer_idx[layer], j);
+                    layout.layer_idx[layer] = i;
+                }
+                if let Key::Shift = a {
+                    assert_eq!(layout.shift_idx, Some(i));
+                    layout.shift_idx = Some(j);
+                }
+                if let Key::Shift = b {
+                    assert_eq!(layout.shift_idx, Some(j));
+                    layout.shift_idx = Some(i);
+                }
+
                 if l0 == l1 {
-                    layout[l0].0.swap(i, j);
+                    layout.layout[l0].0.swap(i, j);
                     return;
                 }
                 if l0 > l1 {
@@ -295,7 +382,7 @@ impl Mutation {
                 }
                 // Split the layers so we can safely have mutable references
                 // to two parts of it.
-                let (left, right) = layout.layers.split_at_mut(l0 + 1);
+                let (left, right) = layout.layout.layers.split_at_mut(l0 + 1);
                 std::mem::swap(&mut left.last_mut().unwrap()[i], &mut right[l1 - l0 - 1][j]);
             } // Self::SwapPaired { l0, l1, i, j } => {
               //     layout[l0].0.swap(i, j);
@@ -304,7 +391,7 @@ impl Mutation {
         }
     }
 
-    fn undo(self, layout: &mut Layout) {
+    fn undo(self, layout: &mut AnnotatedLayout) {
         self.apply(layout)
     }
 }
@@ -317,10 +404,11 @@ const P0: f64 = 1.;
 /// Optimise the layout using simulated annealing.
 pub fn optimise(
     n: u32,
-    mut layout: Layout,
+    layout: Layout,
     corpus: &[String],
     mut progress_callback: impl FnMut(u32),
 ) -> (Layout, f64) {
+    let mut layout: AnnotatedLayout = layout.into();
     let mut rng = thread_rng();
     let initial_energy = cost(corpus, &layout);
     let t0 = initial_energy;
@@ -345,5 +433,5 @@ pub fn optimise(
         // eprintln!("iteration {}, energy = {}", i, energy);
     }
     // eprintln!("improvement: {}", initial_energy - energy);
-    (layout, initial_energy - energy)
+    (layout.layout, initial_energy - energy)
 }
