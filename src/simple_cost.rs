@@ -1,8 +1,8 @@
 use enum_map::EnumMap;
 
 use crate::{
-    evolve::{CharIdx, TypingEvent},
-    layout::{finger_for_pos, Layout, NUM_LAYERS},
+    evolve::{AnnotatedLayout, TypingEvent},
+    layout::finger_for_pos,
 };
 
 pub fn cost_of_typing(keys: impl Iterator<Item = TypingEvent>) -> (u64, u64) {
@@ -33,11 +33,6 @@ pub fn cost_of_typing(keys: impl Iterator<Item = TypingEvent>) -> (u64, u64) {
     (total_cost, count)
 }
 
-pub fn layout_cost(
-    _layout: &Layout,
-    _char_idx: &CharIdx,
-    _layer_idx: [usize; NUM_LAYERS],
-    _shift_idx: Option<usize>,
-) -> f64 {
+pub fn layout_cost(_layout: &AnnotatedLayout) -> f64 {
     0.
 }

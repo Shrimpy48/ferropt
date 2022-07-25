@@ -10,7 +10,6 @@ use lazy_static::lazy_static;
 use regex::Regex;
 
 pub const NUM_KEYS: usize = 34;
-pub const NUM_LAYERS: usize = 3;
 
 lazy_static! {
     static ref KC_RE: Regex =
@@ -493,7 +492,7 @@ impl<T> IndexMut<usize> for Layer<T> {
 #[serde(into = "serde_json::Value")]
 #[repr(transparent)]
 pub struct Layout {
-    pub(crate) layers: [Layer<Key>; NUM_LAYERS],
+    pub(crate) layers: Vec<Layer<Key>>,
 }
 
 impl Layout {
@@ -553,13 +552,7 @@ impl TryFrom<serde_json::Value> for Layout {
                         serde_json::Value::Array(v) => v
                             .iter()
                             .map(|x| x.clone().try_into())
-                            .collect::<Result<Vec<_>, _>>()
-                            .and_then(|v| {
-                                v.try_into().map_err(|v: Vec<_>| ParseError::WrongLength {
-                                    expected: NUM_LAYERS,
-                                    found: v.len(),
-                                })
-                            }),
+                            .collect::<Result<Vec<_>, _>>(),
                         _ => Err(ParseError::WrongType {
                             expected: discriminant(&serde_json::Value::Array(Vec::new())),
                             found: discriminant(ls),

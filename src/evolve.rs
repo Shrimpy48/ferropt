@@ -9,7 +9,7 @@ use std::{cmp, fs, io};
 
 use crate::cost::{cost_of_typing, layout_cost};
 
-use crate::layout::{Key, Layout, NUM_KEYS, NUM_LAYERS};
+use crate::layout::{Key, Layout, NUM_KEYS};
 
 const CORPUS_DIR: &str = "corpus";
 
@@ -273,7 +273,7 @@ pub struct CharIdxEntry {
 pub struct AnnotatedLayout {
     layout: Layout,
     char_idx: CharIdx,
-    layer_idx: [usize; NUM_LAYERS],
+    layer_idx: Vec<usize>,
     shift_idx: Option<usize>,
 }
 
@@ -286,12 +286,16 @@ impl AnnotatedLayout {
         &self.char_idx
     }
 
-    pub fn layer_idx(&self) -> &[usize; NUM_LAYERS] {
+    pub fn layer_idx(&self) -> &[usize] {
         &self.layer_idx
     }
 
     pub fn shift_idx(&self) -> &Option<usize> {
         &self.shift_idx
+    }
+
+    pub fn num_layers(&self) -> usize {
+        self.layout.layers.len()
     }
 }
 
@@ -337,7 +341,7 @@ impl From<Layout> for AnnotatedLayout {
                 Key::Layer(n) => Some((*n, j)),
                 _ => None,
             })
-            .fold([0; NUM_LAYERS], |mut a, (n, j)| {
+            .fold(vec![0; layout.layers.len()], |mut a, (n, j)| {
                 a[n] = j;
                 a
             });
@@ -410,7 +414,7 @@ enum Mutation {
 
 impl Mutation {
     fn gen<R: Rng>(mut rng: R, layout: &AnnotatedLayout) -> Self {
-        let layer = rng.gen_range(0..NUM_LAYERS);
+        let layer = rng.gen_range(0..layout.num_layers());
         let i = rng.gen_range(0..NUM_KEYS);
         if matches!(layout.layout[layer][i], Key::Layer(_) | Key::Shift) {
             assert_eq!(layer, 0);
@@ -419,7 +423,7 @@ impl Mutation {
             let j = rng.gen_range(0..NUM_KEYS);
             Self::SwapKeys { l0: 0, l1: 0, i, j }
         } else {
-            let layer2 = rng.gen_range(0..NUM_LAYERS);
+            let layer2 = rng.gen_range(0..layout.num_layers());
             let j = loop {
                 let j = rng.gen_range(0..NUM_KEYS);
                 if !matches!(layout.layout[layer2][j], Key::Layer(_) | Key::Shift) {
