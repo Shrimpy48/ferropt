@@ -2,45 +2,124 @@ use rand::{thread_rng, Rng};
 
 use ahash::AHashMap;
 
+use std::collections::VecDeque;
+use std::iter::FusedIterator;
 use std::path::Path;
 use std::{cmp, fs, io};
 
 use crate::cost::{cost_of_typing, layout_cost};
+
 use crate::layout::{Key, Layout, NUM_KEYS, NUM_LAYERS};
 
 const CORPUS_DIR: &str = "corpus";
 
-fn keys(char_idx: &CharIdx, chars: impl Iterator<Item = char>) -> Vec<(usize, bool, Vec<usize>)> {
-    let mut out = vec![(0, false, Vec::new())];
-    for pos in chars.map(|c| char_idx.get(&c).copied()) {
-        let (cur_layer, cur_shifted, cur_keys) = out.last_mut().unwrap();
-        match pos {
-            Some(CharIdxEntry {
-                layer,
-                pos,
-                shifted,
-            }) => {
-                if layer == *cur_layer && shifted == *cur_shifted {
-                    cur_keys.push(pos);
-                } else {
-                    out.push((layer, shifted, vec![pos]));
-                }
-            }
-            None if !cur_keys.is_empty() => {
-                // Add an empty Vec to indicate the unknown character.
-                out.push((0, false, Vec::new()));
-                out.push((0, false, Vec::new()));
-            }
-            None => {}
-        }
-    }
-    if out.last().unwrap().2.is_empty() {
-        out.pop();
-    }
-    out
+// TODO: use one-shot layers/shift where possible.
+#[derive(Clone)]
+struct Keys<'l, I> {
+    layout: &'l AnnotatedLayout,
+    chars: I,
+    cur_layer: usize,
+    cur_shifted: bool,
+    buf: VecDeque<TypingEvent>,
 }
 
-#[derive(Debug, Clone, Copy)]
+impl<'l, I> Iterator for Keys<'l, I>
+where
+    I: Iterator<Item = char>,
+{
+    type Item = TypingEvent;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some(e) = self.buf.pop_front() {
+            return Some(e);
+        }
+
+        if let Some(c) = self.chars.next() {
+            match self.layout.char_idx.get(&c).copied() {
+                Some(CharIdxEntry {
+                    layer,
+                    pos,
+                    shifted,
+                }) => {
+                    // A typable character.
+                    if self.cur_layer != 0 && layer != self.cur_layer {
+                        self.buf
+                            .push_back(TypingEvent::Release(self.layout.layer_idx[self.cur_layer]));
+                        self.cur_layer = 0;
+                    }
+                    if self.cur_shifted && !shifted {
+                        self.buf
+                            .push_back(TypingEvent::Release(self.layout.shift_idx.unwrap()));
+                        self.cur_shifted = false;
+                    }
+
+                    if shifted && !self.cur_shifted {
+                        // The shift key is on the home layer.
+                        if self.cur_layer != 0 {
+                            self.buf.push_back(TypingEvent::Release(
+                                self.layout.layer_idx[self.cur_layer],
+                            ));
+                            self.cur_layer = 0;
+                        }
+                        self.buf
+                            .push_back(TypingEvent::Hold(self.layout.shift_idx.unwrap()));
+                        self.cur_shifted = true;
+                    }
+                    if layer != 0 && self.cur_layer != layer {
+                        self.buf
+                            .push_back(TypingEvent::Hold(self.layout.layer_idx[layer]));
+                        self.cur_layer = layer;
+                    }
+
+                    self.buf.push_back(TypingEvent::Tap {
+                        pos,
+                        for_char: true,
+                    });
+                    self.buf.pop_front()
+                }
+                None => {
+                    // An untypable character.
+                    if self.cur_layer != 0 {
+                        self.buf
+                            .push_back(TypingEvent::Release(self.layout.layer_idx[self.cur_layer]));
+                        self.cur_layer = 0;
+                    }
+                    if self.cur_shifted {
+                        self.buf
+                            .push_back(TypingEvent::Release(self.layout.shift_idx.unwrap()));
+                        self.cur_shifted = false;
+                    }
+                    self.buf.push_back(TypingEvent::Unknown);
+                    self.buf.pop_front()
+                }
+            }
+        } else {
+            // No more characters.
+            if self.cur_layer != 0 {
+                self.buf
+                    .push_back(TypingEvent::Release(self.layout.layer_idx[self.cur_layer]));
+                self.cur_layer = 0;
+            }
+            if self.cur_shifted {
+                self.buf
+                    .push_back(TypingEvent::Release(self.layout.shift_idx.unwrap()));
+                self.cur_shifted = false;
+            }
+            self.buf.pop_front()
+        }
+    }
+
+    /// At least one keypress will be yielded for each character in the input,
+    /// either a `Tap` of the corresponding key or `Unknown`.
+    /// More may be generated to switch layers etc.
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let (l, _) = self.chars.size_hint();
+        (l, None)
+    }
+}
+impl<'l, I> FusedIterator for Keys<'l, I> where I: FusedIterator + Iterator<Item = char> {}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TypingEvent {
     Tap { pos: usize, for_char: bool },
     Hold(usize),
@@ -48,93 +127,134 @@ pub enum TypingEvent {
     Unknown,
 }
 
-// Assumes the layer and shift keys are on the home layer.
-fn key_seq(
-    layer_idx: [usize; NUM_LAYERS],
-    shift_idx: Option<usize>,
-    key_groups: impl IntoIterator<Item = (usize, bool, Vec<usize>)>,
-) -> impl Iterator<Item = TypingEvent> {
-    let mut out = Vec::new();
-    let mut cur_layer = 0;
-    let mut cur_shifted = false;
-    for (layer, shifted, keys) in key_groups {
-        if keys.is_empty() {
-            out.push(TypingEvent::Unknown);
-            if cur_layer != 0 {
-                out.push(TypingEvent::Release(layer_idx[cur_layer]));
-                cur_layer = 0;
-            }
-            if cur_shifted {
-                out.push(TypingEvent::Release(shift_idx.unwrap()));
-                cur_shifted = false;
-            }
-            continue;
-        }
-        if cur_layer != 0 && layer != cur_layer {
-            out.push(TypingEvent::Release(layer_idx[cur_layer]));
-            cur_layer = 0;
-        }
-        if cur_shifted && !shifted {
-            out.push(TypingEvent::Release(shift_idx.unwrap()));
-            cur_shifted = false;
-        }
-        if keys.len() == 1 {
-            if shifted && !cur_shifted {
-                if cur_layer != 0 {
-                    out.push(TypingEvent::Release(layer_idx[cur_layer]));
-                    cur_layer = 0;
-                }
-                out.push(TypingEvent::Tap {
-                    pos: shift_idx.unwrap(),
-                    for_char: false,
-                });
-                cur_shifted = false;
-            }
-            if layer != 0 && layer != cur_layer {
-                out.push(TypingEvent::Tap {
-                    pos: layer_idx[layer],
-                    for_char: false,
-                });
-                cur_layer = 0;
-            }
-            out.push(TypingEvent::Tap {
-                pos: keys[0],
-                for_char: true,
-            });
-        } else {
-            if shifted && !cur_shifted {
-                if cur_layer != 0 {
-                    out.push(TypingEvent::Release(layer_idx[cur_layer]));
-                    cur_layer = 0;
-                }
-                out.push(TypingEvent::Hold(shift_idx.unwrap()));
-                cur_shifted = true;
-            }
-            if layer != 0 && layer != cur_layer {
-                out.push(TypingEvent::Hold(layer_idx[layer]));
-                cur_layer = layer;
-            }
-            for key in keys {
-                out.push(TypingEvent::Tap {
-                    pos: key,
-                    for_char: true,
-                });
-            }
-        }
+// fn keys(char_idx: &CharIdx, chars: impl Iterator<Item = char>) -> Vec<(usize, bool, Vec<usize>)> {
+//     let mut out = vec![(0, false, Vec::new())];
+//     for pos in chars.map(|c| char_idx.get(&c).copied()) {
+//         let (cur_layer, cur_shifted, cur_keys) = out.last_mut().unwrap();
+//         match pos {
+//             Some(CharIdxEntry {
+//                 layer,
+//                 pos,
+//                 shifted,
+//             }) => {
+//                 if layer == *cur_layer && shifted == *cur_shifted {
+//                     cur_keys.push(pos);
+//                 } else {
+//                     out.push((layer, shifted, vec![pos]));
+//                 }
+//             }
+//             None if !cur_keys.is_empty() => {
+//                 // Add an empty Vec to indicate the unknown character.
+//                 out.push((0, false, Vec::new()));
+//                 out.push((0, false, Vec::new()));
+//             }
+//             None => {}
+//         }
+//     }
+//     if out.last().unwrap().2.is_empty() {
+//         out.pop();
+//     }
+//     out
+// }
+
+fn keys<I: IntoIterator<Item = char>>(layout: &AnnotatedLayout, chars: I) -> Keys<'_, I::IntoIter> {
+    Keys {
+        layout,
+        chars: chars.into_iter(),
+        cur_layer: 0,
+        cur_shifted: false,
+        buf: VecDeque::new(),
     }
-    if cur_layer != 0 {
-        out.push(TypingEvent::Release(layer_idx[cur_layer]));
-    }
-    if cur_shifted {
-        out.push(TypingEvent::Release(shift_idx.unwrap()));
-    }
-    out.into_iter()
 }
 
-pub fn string_cost(layout: &AnnotatedLayout, string: &str) -> (u64, u64) {
-    let keys = keys(&layout.char_idx, string.chars());
+// Assumes the layer and shift keys are on the home layer.
+// fn key_seq(
+//     layer_idx: [usize; NUM_LAYERS],
+//     shift_idx: Option<usize>,
+//     key_groups: impl IntoIterator<Item = (usize, bool, Vec<usize>)>,
+// ) -> impl Iterator<Item = TypingEvent> {
+//     let mut out = Vec::new();
+//     let mut cur_layer = 0;
+//     let mut cur_shifted = false;
+//     for (layer, shifted, keys) in key_groups {
+//         if keys.is_empty() {
+//             out.push(TypingEvent::Unknown);
+//             if cur_layer != 0 {
+//                 out.push(TypingEvent::Release(layer_idx[cur_layer]));
+//                 cur_layer = 0;
+//             }
+//             if cur_shifted {
+//                 out.push(TypingEvent::Release(shift_idx.unwrap()));
+//                 cur_shifted = false;
+//             }
+//             continue;
+//         }
+//         if cur_layer != 0 && layer != cur_layer {
+//             out.push(TypingEvent::Release(layer_idx[cur_layer]));
+//             cur_layer = 0;
+//         }
+//         if cur_shifted && !shifted {
+//             out.push(TypingEvent::Release(shift_idx.unwrap()));
+//             cur_shifted = false;
+//         }
+//         if keys.len() == 1 {
+//             if shifted && !cur_shifted {
+//                 if cur_layer != 0 {
+//                     out.push(TypingEvent::Release(layer_idx[cur_layer]));
+//                     cur_layer = 0;
+//                 }
+//                 out.push(TypingEvent::Tap {
+//                     pos: shift_idx.unwrap(),
+//                     for_char: false,
+//                 });
+//                 cur_shifted = false;
+//             }
+//             if layer != 0 && layer != cur_layer {
+//                 out.push(TypingEvent::Tap {
+//                     pos: layer_idx[layer],
+//                     for_char: false,
+//                 });
+//                 cur_layer = 0;
+//             }
+//             out.push(TypingEvent::Tap {
+//                 pos: keys[0],
+//                 for_char: true,
+//             });
+//         } else {
+//             if shifted && !cur_shifted {
+//                 if cur_layer != 0 {
+//                     out.push(TypingEvent::Release(layer_idx[cur_layer]));
+//                     cur_layer = 0;
+//                 }
+//                 out.push(TypingEvent::Hold(shift_idx.unwrap()));
+//                 cur_shifted = true;
+//             }
+//             if layer != 0 && layer != cur_layer {
+//                 out.push(TypingEvent::Hold(layer_idx[layer]));
+//                 cur_layer = layer;
+//             }
+//             for key in keys {
+//                 out.push(TypingEvent::Tap {
+//                     pos: key,
+//                     for_char: true,
+//                 });
+//             }
+//         }
+//     }
+//     if cur_layer != 0 {
+//         out.push(TypingEvent::Release(layer_idx[cur_layer]));
+//     }
+//     if cur_shifted {
+//         out.push(TypingEvent::Release(shift_idx.unwrap()));
+//     }
+//     out.into_iter()
+// }
 
-    let events = key_seq(layout.layer_idx, layout.shift_idx, keys);
+pub fn string_cost(layout: &AnnotatedLayout, string: &str) -> (u64, u64) {
+    // let keys = keys(&layout.char_idx, string.chars());
+    // let events = key_seq(layout.layer_idx, layout.shift_idx, keys);
+
+    let events = keys(layout, string.chars());
 
     cost_of_typing(events)
 }
@@ -434,4 +554,115 @@ pub fn optimise(
     }
     // eprintln!("improvement: {}", initial_energy - energy);
     (layout.layout, initial_energy - energy)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::fs::File;
+
+    use super::*;
+
+    #[test]
+    fn keys_helloworld() {
+        let f = File::open("qwerty.json").unwrap();
+        let layout: Layout = serde_json::from_reader(f).unwrap();
+        let string = "Hello, WORLD! (~1)";
+        let expected = {
+            use TypingEvent::*;
+            vec![
+                Hold(30),
+                Tap {
+                    pos: 15,
+                    for_char: true,
+                },
+                Release(30),
+                Tap {
+                    pos: 2,
+                    for_char: true,
+                },
+                Tap {
+                    pos: 18,
+                    for_char: true,
+                },
+                Tap {
+                    pos: 18,
+                    for_char: true,
+                },
+                Tap {
+                    pos: 8,
+                    for_char: true,
+                },
+                Tap {
+                    pos: 27,
+                    for_char: true,
+                },
+                Tap {
+                    pos: 31,
+                    for_char: true,
+                },
+                Hold(30),
+                Tap {
+                    pos: 1,
+                    for_char: true,
+                },
+                Tap {
+                    pos: 8,
+                    for_char: true,
+                },
+                Tap {
+                    pos: 3,
+                    for_char: true,
+                },
+                Tap {
+                    pos: 18,
+                    for_char: true,
+                },
+                Tap {
+                    pos: 12,
+                    for_char: true,
+                },
+                Release(30),
+                Hold(32),
+                Tap {
+                    pos: 15,
+                    for_char: true,
+                },
+                Release(32),
+                Tap {
+                    pos: 31,
+                    for_char: true,
+                },
+                Hold(32),
+                Tap {
+                    pos: 13,
+                    for_char: true,
+                },
+                Release(32),
+                Hold(30),
+                Hold(32),
+                Tap {
+                    pos: 12,
+                    for_char: true,
+                },
+                Release(32),
+                Release(30),
+                Hold(33),
+                Tap {
+                    pos: 1,
+                    for_char: true,
+                },
+                Release(33),
+                Hold(32),
+                Tap {
+                    pos: 16,
+                    for_char: true,
+                },
+                Release(32),
+            ]
+        };
+
+        let actual: Vec<_> = keys(&layout.into(), string.chars()).collect();
+
+        assert_eq!(expected, actual);
+    }
 }
