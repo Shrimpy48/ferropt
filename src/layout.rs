@@ -10,7 +10,7 @@ use lazy_static::lazy_static;
 use regex::Regex;
 
 pub const NUM_KEYS: usize = 34;
-pub const NUM_LAYERS: usize = 3;
+pub const NUM_LAYERS: usize = 1;
 
 lazy_static! {
     static ref KC_RE: Regex =

@@ -3,7 +3,7 @@ use rand::{thread_rng, Rng};
 use ahash::AHashMap;
 
 use std::path::Path;
-use std::{cmp, fs, io, iter};
+use std::{cmp, fs, io};
 
 use crate::cost::{cost_of_typing, layout_cost};
 use crate::layout::{Key, Layout, NUM_KEYS, NUM_LAYERS};
@@ -144,6 +144,7 @@ pub fn string_cost(
     cost_of_typing(events)
 }
 
+// Assumes there is only one intended way of typing each character.
 pub type CharIdx = AHashMap<char, CharIdxEntry>;
 
 #[derive(Debug, Clone, Copy)]
@@ -212,7 +213,7 @@ fn cost(corpus: &[String], layout: &Layout) -> f64 {
     //     .map(|s| string_cost(&char_idx, layer_idx, next_key_cost, held_key_cost, s))
     //     .reduce(|| (0, 0), |(a0, a1), (b0, b1)| (a0 + b0, a1 + b1));
 
-    t as f64 / c as f64 + layout_cost(layout, &char_idx)
+    t as f64 / c as f64 + layout_cost(layout, &char_idx, layer_idx, shift_idx)
 }
 
 fn read_corpus_impl<P: AsRef<Path>>(corpus: &mut Vec<String>, path: P) -> io::Result<()> {
@@ -229,9 +230,6 @@ fn read_corpus_impl<P: AsRef<Path>>(corpus: &mut Vec<String>, path: P) -> io::Re
 }
 
 pub fn read_corpus() -> io::Result<Vec<String>> {
-    // read_dir(CORPUS_DIR)?
-    //     .map(|entry| fs::read_to_string(entry?.path()))
-    //     .collect::<io::Result<Vec<_>>>()
     let mut out = Vec::new();
     read_corpus_impl(&mut out, CORPUS_DIR)?;
     Ok(out)
@@ -245,12 +243,12 @@ enum Mutation {
         i: usize,
         j: usize,
     },
-    SwapPaired {
-        l0: usize,
-        l1: usize,
-        i: usize,
-        j: usize,
-    },
+    // SwapPaired {
+    //     l0: usize,
+    //     l1: usize,
+    //     i: usize,
+    //     j: usize,
+    // },
 }
 
 impl Mutation {
@@ -280,29 +278,6 @@ impl Mutation {
         }
     }
 
-    // fn gen<R: Rng>(mut rng: R, layout: &Layout) -> Self {
-    //     let layer = rng.gen_range(0..NUM_LAYERS);
-    //     let i = rng.gen_range(0..30);
-    //     if i >= 30 {
-    //         // Move thumb keys around.
-    //         let j = 30 + rng.gen_range(0..4);
-    //         return Self::SwapKeys { l0: 0, i, l1: 0, j };
-    //     }
-    //     // if layer <= 1 {
-    //     //     // Keep shifted and unshifted layers in sync.
-    //     //     let j = rng.gen_range(0..30);
-    //     //     return Self::SwapPaired { l0: 0, l1: 1, i, j };
-    //     // }
-    //     // Keep keys on their own layer.
-    //     let j = rng.gen_range(0..30);
-    //     Self::SwapKeys {
-    //         l0: layer,
-    //         l1: layer,
-    //         i,
-    //         j,
-    //     }
-    // }
-
     fn apply(self, layout: &mut Layout) {
         match self {
             Self::SwapKeys {
@@ -322,11 +297,10 @@ impl Mutation {
                 // to two parts of it.
                 let (left, right) = layout.layers.split_at_mut(l0 + 1);
                 std::mem::swap(&mut left.last_mut().unwrap()[i], &mut right[l1 - l0 - 1][j]);
-            }
-            Self::SwapPaired { l0, l1, i, j } => {
-                layout[l0].0.swap(i, j);
-                layout[l1].0.swap(i, j);
-            }
+            } // Self::SwapPaired { l0, l1, i, j } => {
+              //     layout[l0].0.swap(i, j);
+              //     layout[l1].0.swap(i, j);
+              // }
         }
     }
 

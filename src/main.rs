@@ -14,7 +14,7 @@ use std::time::Instant;
 
 use indicatif::{HumanDuration, MultiProgress, ProgressBar};
 
-const TRIALS: usize = 21;
+const TRIALS: usize = 4;
 
 fn main() -> io::Result<()> {
     let f = File::open("initial.json")?;
@@ -25,7 +25,9 @@ fn main() -> io::Result<()> {
 
     let mut best = 0.;
 
-    for n in [100, 1_000, 5_000] {
+    // for n in [100, 1_000, 10_000, 100_000, 200_000, 300_000, 400_000, 500_000] {
+    for n in 1..1000 {
+        let n = n * 1000;
         let (l, score) = run_trials(n, &corpus, &layout);
         if score > best {
             best = score;
@@ -77,14 +79,21 @@ fn run_trials(n: u32, corpus: &[String], layout: &Layout) -> (Layout, f64) {
     let var = results.iter().map(|(_, i)| (i - mean).powi(2)).sum::<f64>() / TRIALS as f64;
     let std_dev = var.sqrt();
 
+    let mad = results
+        .iter()
+        .flat_map(|(a, _)| results.iter().map(|(b, _)| a.hamming_dist(b) as u32))
+        .sum::<u32>() as f64
+        / (TRIALS * TRIALS) as f64;
+
     let best = results
         .into_iter()
         .max_by(|(_, a), (_, b)| a.total_cmp(b))
         .unwrap();
 
     eprintln!(
-        "N = {:6}: μ = {:6.3}, σ = {:6.3}, best = {:6.3} in {}",
+        "N = {:6}: layout MD = {:6.2}, μ = {:6.3}, σ = {:5.3}, best = {:6.3} in {}",
         n,
+        mad,
         mean,
         std_dev,
         best.1,
