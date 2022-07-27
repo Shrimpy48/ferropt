@@ -36,9 +36,8 @@ fn main() -> io::Result<()> {
     let mut best = 0.;
 
     // for n in [100, 1_000, 10_000, 100_000, 200_000, 300_000, 400_000, 500_000] {
-    // for n in 1..1000 {
-    // let n = n * 1000;
-    for n in [100] {
+    for n in 1..1000 {
+        let n = n * 1000;
         let (l, score) = run_trials(n, &corpus, &layout);
         if score > best {
             best = score;

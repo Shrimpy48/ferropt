@@ -97,7 +97,7 @@ fn next_key_cost(i: usize, j: usize) -> u8 {
         if sq_dist == 0 {
             strength_penalty
         } else {
-            strength_penalty + ulog2(sq_dist)
+            strength_penalty + log_norm(sq_dist)
         }
     } else if h0 == h1 {
         // Same hand, different finger.
@@ -130,7 +130,7 @@ fn next_key_cost(i: usize, j: usize) -> u8 {
             Hand::Right => c1 > c0,
         };
         let stretch = c0 == 4 || c0 == 5 || c1 == 4 || c1 == 5;
-        let dist = ulog2(row_dist * vert_penalty(f1) as usize);
+        let dist = log_norm(row_dist * vert_penalty(f1) as usize);
         (if outward { OUTWARD_PENALTY } else { 0 }) + (if stretch { 2 } else { 0 }) + dist
     } else {
         // Different hand.
@@ -138,14 +138,14 @@ fn next_key_cost(i: usize, j: usize) -> u8 {
     }
 }
 
-fn ulog2(x: usize) -> u8 {
+pub(crate) fn log_norm(x: usize) -> u8 {
+    // To distinguish between 0 and 1;
+    let x = x + 1;
+    // Calculate the integer log2, rounded down.
     let shift = usize::BITS - x.leading_zeros();
-    if shift == 0 {
-        0
-    } else {
-        assert!(shift - 1 <= u8::MAX.into());
-        (shift - 1) as u8
-    }
+    assert!(shift > 0);
+    assert!(shift - 1 <= u8::MAX.into());
+    (shift - 1) as u8
 }
 
 fn held_key_cost(i: usize, j: usize) -> u8 {
@@ -205,7 +205,7 @@ fn held_key_cost(i: usize, j: usize) -> u8 {
             Hand::Right => c1 > c0,
         };
         let stretch = c0 == 4 || c0 == 5 || c1 == 4 || c1 == 5;
-        let dist = ulog2(row_dist * vert_penalty(f1) as usize);
+        let dist = log_norm(row_dist * vert_penalty(f1) as usize);
         (if outward { OUTWARD_PENALTY } else { 0 })
             + (if stretch { 2 } else { 0 })
             + dist
@@ -438,4 +438,16 @@ fn layer_variation(char_idx: &CharIdx, chars: impl IntoIterator<Item = char>) ->
 
 pub fn layout_cost(layout: &AnnotatedLayout) -> f64 {
     similarity_cost(layout) + memorability_cost(layout)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn log_norm_small() {
+        let inputs = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+        let expected = [0, 1, 1, 2, 2, 2, 2, 3, 3, 3];
+        assert_eq!(inputs.map(log_norm), expected);
+    }
 }

@@ -7,7 +7,7 @@ use std::iter::FusedIterator;
 use std::path::Path;
 use std::{cmp, fs, io};
 
-use crate::cost::{cost_of_typing, layout_cost};
+use crate::simple_cost::{cost_of_typing, layout_cost};
 
 use crate::layout::{Key, Layout, NUM_KEYS};
 
