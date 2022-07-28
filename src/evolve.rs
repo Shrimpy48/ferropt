@@ -2,6 +2,7 @@ use rand::{thread_rng, Rng};
 
 use ahash::AHashMap;
 
+use std::any::TypeId;
 use std::collections::VecDeque;
 use std::iter::FusedIterator;
 use std::path::Path;
@@ -13,7 +14,6 @@ use crate::layout::{Key, Layout, NUM_KEYS};
 
 const CORPUS_DIR: &str = "corpus";
 
-// TODO: use one-shot layers/shift where possible.
 #[derive(Clone)]
 struct Keys<'l, I> {
     layout: &'l AnnotatedLayout,
@@ -114,10 +114,95 @@ where
     /// More may be generated to switch layers etc.
     fn size_hint(&self) -> (usize, Option<usize>) {
         let (l, _) = self.chars.size_hint();
-        (l, None)
+        (l + self.buf.len(), None)
     }
 }
 impl<'l, I> FusedIterator for Keys<'l, I> where I: FusedIterator + Iterator<Item = char> {}
+
+#[derive(Clone)]
+struct Oneshot<I> {
+    events: I,
+    buf: VecDeque<TypingEvent>,
+}
+
+impl<I> Oneshot<I>
+where
+    I: Iterator<Item = TypingEvent>,
+{
+    /// Get the ith element of buf, by extending it if necessary.
+    /// Provides arbitrary lookahead to the events iterator.
+    fn peek_ith(&mut self, i: usize) -> Option<&TypingEvent> {
+        self.buf.extend(
+            self.events
+                .by_ref()
+                .take((i + 1).saturating_sub(self.buf.len())),
+        );
+        self.buf.get(i)
+    }
+}
+
+impl<I> Iterator for Oneshot<I>
+where
+    I: Iterator<Item = TypingEvent>,
+{
+    type Item = TypingEvent;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            match self.peek_ith(0).copied() {
+                None => return None,
+                Some(TypingEvent::Hold(pos)) => {
+                    let mut used = false;
+                    for i in 1.. {
+                        match self.peek_ith(i).copied() {
+                            None => panic!("{pos} held but not released"),
+                            Some(TypingEvent::Tap { .. } | TypingEvent::Unknown) => {
+                                if used {
+                                    // The hold is used for multiple keys, so should stay a hold.
+                                    self.buf.pop_front();
+                                    return Some(TypingEvent::Hold(pos));
+                                }
+                                used = true;
+                            }
+                            Some(TypingEvent::Release(pos2)) if pos == pos2 => {
+                                match used {
+                                    false => {
+                                        // The hold is not actually doing anything, so remove it.
+                                        // This will break if modifiers require other modifiers to be held,
+                                        // for eg. if they are not on the home layer.
+                                        self.buf.remove(i);
+                                        self.buf.remove(0);
+                                    }
+                                    true => {
+                                        // The hold is used for 1 tap, so should be oneshot.
+                                        self.buf.remove(i);
+                                        self.buf.pop_front();
+                                        return Some(TypingEvent::Tap {
+                                            pos,
+                                            for_char: false,
+                                        });
+                                    }
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+                Some(e) => {
+                    self.buf.pop_front();
+                    return Some(e);
+                }
+            }
+        }
+    }
+
+    /// At most one event will be yielded for each event in the input.
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let (_, u) = self.events.size_hint();
+        (0, u.map(|u| u + self.buf.len()))
+    }
+}
+impl<I> FusedIterator for Oneshot<I> where I: FusedIterator + Iterator<Item = TypingEvent> {}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TypingEvent {
@@ -163,6 +248,13 @@ fn keys<I: IntoIterator<Item = char>>(layout: &AnnotatedLayout, chars: I) -> Key
         chars: chars.into_iter(),
         cur_layer: 0,
         cur_shifted: false,
+        buf: VecDeque::new(),
+    }
+}
+
+fn oneshot<I: IntoIterator<Item = TypingEvent>>(events: I) -> Oneshot<I::IntoIter> {
+    Oneshot {
+        events: events.into_iter(),
         buf: VecDeque::new(),
     }
 }
@@ -254,7 +346,7 @@ pub fn string_cost(layout: &AnnotatedLayout, string: &str) -> (u64, u64) {
     // let keys = keys(&layout.char_idx, string.chars());
     // let events = key_seq(layout.layer_idx, layout.shift_idx, keys);
 
-    let events = keys(layout, string.chars());
+    let events = oneshot(keys(layout, string.chars()));
 
     cost_of_typing(events)
 }
@@ -666,6 +758,124 @@ mod tests {
         };
 
         let actual: Vec<_> = keys(&layout.into(), string.chars()).collect();
+
+        assert_eq!(expected, actual);
+    }
+
+    #[test]
+    fn oneshot_helloworld() {
+        let f = File::open("qwerty.json").unwrap();
+        let layout: Layout = serde_json::from_reader(f).unwrap();
+        let string = "Hello, WORLD! (~1)";
+        let expected = {
+            use TypingEvent::*;
+            vec![
+                Tap {
+                    pos: 30,
+                    for_char: false,
+                },
+                Tap {
+                    pos: 15,
+                    for_char: true,
+                },
+                Tap {
+                    pos: 2,
+                    for_char: true,
+                },
+                Tap {
+                    pos: 18,
+                    for_char: true,
+                },
+                Tap {
+                    pos: 18,
+                    for_char: true,
+                },
+                Tap {
+                    pos: 8,
+                    for_char: true,
+                },
+                Tap {
+                    pos: 27,
+                    for_char: true,
+                },
+                Tap {
+                    pos: 31,
+                    for_char: true,
+                },
+                Hold(30),
+                Tap {
+                    pos: 1,
+                    for_char: true,
+                },
+                Tap {
+                    pos: 8,
+                    for_char: true,
+                },
+                Tap {
+                    pos: 3,
+                    for_char: true,
+                },
+                Tap {
+                    pos: 18,
+                    for_char: true,
+                },
+                Tap {
+                    pos: 12,
+                    for_char: true,
+                },
+                Release(30),
+                Tap {
+                    pos: 32,
+                    for_char: false,
+                },
+                Tap {
+                    pos: 15,
+                    for_char: true,
+                },
+                Tap {
+                    pos: 31,
+                    for_char: true,
+                },
+                Tap {
+                    pos: 32,
+                    for_char: false,
+                },
+                Tap {
+                    pos: 13,
+                    for_char: true,
+                },
+                Tap {
+                    pos: 30,
+                    for_char: false,
+                },
+                Tap {
+                    pos: 32,
+                    for_char: false,
+                },
+                Tap {
+                    pos: 12,
+                    for_char: true,
+                },
+                Tap {
+                    pos: 33,
+                    for_char: false,
+                },
+                Tap {
+                    pos: 1,
+                    for_char: true,
+                },
+                Tap {
+                    pos: 32,
+                    for_char: false,
+                },
+                Tap {
+                    pos: 16,
+                    for_char: true,
+                },
+            ]
+        };
+
+        let actual: Vec<_> = oneshot(keys(&layout.into(), string.chars())).collect();
 
         assert_eq!(expected, actual);
     }
