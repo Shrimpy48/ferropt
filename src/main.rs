@@ -49,7 +49,7 @@ fn main() -> io::Result<()> {
     Ok(())
 }
 
-fn run_trials(n: u32, corpus: &[String], layout: &Layout) -> (Layout, f64) {
+fn run_trials(n: u32, corpus: &[Vec<u8>], layout: &Layout) -> (Layout, f64) {
     let start = Instant::now();
 
     let multiprog = MultiProgress::new();

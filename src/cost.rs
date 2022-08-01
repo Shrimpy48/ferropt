@@ -1,3 +1,4 @@
+use encoding_rs::WINDOWS_1252;
 use lazy_static::lazy_static;
 
 use crate::{
@@ -256,21 +257,118 @@ pub fn cost_of_typing(keys: impl Iterator<Item = TypingEvent>) -> (u64, u64) {
     (total_cost, count)
 }
 
-fn similarity_cost(layout: &AnnotatedLayout) -> f64 {
+fn similarity_cost(_layout: &AnnotatedLayout) -> f64 {
     0.
     // layout.hamming_dist(&DEFAULT_LAYOUT) as f64 / (NUM_KEYS * NUM_LAYERS) as f64 * 0.5
+}
+
+lazy_static! {
+    static ref ORDERED_PAIRS: [[u8; 2]; 4] =
+        [["(", ")"], ["{", "}"], ["[", "]"], ["<", ">"],].map(|p| p.map(|s| {
+            let (out, _, had_errors) = WINDOWS_1252.encode(s);
+            assert!(!had_errors);
+            assert!(out.len() == 1);
+            out[0]
+        }));
+    static ref SIMILAR_PAIRS: [[u8; 2]; 17] = [
+        ["+", "-"],
+        ["*", "/"],
+        ["+", "*"],
+        ["-", "/"],
+        ["/", "%"],
+        ["\\", "/"],
+        ["\\", "|"],
+        ["/", "|"],
+        ["\"", "'"],
+        ["*", "&"],
+        ["!", "?"],
+        [".", ","],
+        ["$", "£"],
+        ["-", "_"],
+        ["-", "~"],
+        ["'", "`"],
+        [";", ":"],
+    ]
+    .map(|p| p.map(|s| {
+        let (out, _, had_errors) = WINDOWS_1252.encode(s);
+        assert!(!had_errors);
+        assert!(out.len() == 1);
+        out[0]
+    }));
+    static ref SPACE: u8 = {
+        let (out, _, had_errors) = WINDOWS_1252.encode(" ");
+        assert!(!had_errors);
+        assert!(out.len() == 1);
+        out[0]
+    };
+    static ref LOWER_ALPHA: [u8; 26] = [
+        "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r",
+        "s", "t", "u", "v", "w", "x", "y", "z",
+    ]
+    .map(|s| {
+        let (out, _, had_errors) = WINDOWS_1252.encode(s);
+        assert!(!had_errors);
+        assert!(out.len() == 1);
+        out[0]
+    });
+    static ref UPPER_ALPHA: [u8; 26] = [
+        "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R",
+        "S", "T", "U", "V", "W", "X", "Y", "Z",
+    ]
+    .map(|s| {
+        let (out, _, had_errors) = WINDOWS_1252.encode(s);
+        assert!(!had_errors);
+        assert!(out.len() == 1);
+        out[0]
+    });
+    static ref NUMBERS: [u8; 10] = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"].map(|s| {
+        let (out, _, had_errors) = WINDOWS_1252.encode(s);
+        assert!(!had_errors);
+        assert!(out.len() == 1);
+        out[0]
+    });
+    static ref MATHS_SYMBOLS: [u8; 13] =
+        ["+", "-", "*", "/", "%", "=", "!", "@", "<", ">", "^", "&", "|",].map(|s| {
+            let (out, _, had_errors) = WINDOWS_1252.encode(s);
+            assert!(!had_errors);
+            assert!(out.len() == 1);
+            out[0]
+        });
+    static ref BRACKETS: [u8; 8] = ["(", ")", "{", "}", "[", "]", "<", ">"].map(|s| {
+        let (out, _, had_errors) = WINDOWS_1252.encode(s);
+        assert!(!had_errors);
+        assert!(out.len() == 1);
+        out[0]
+    });
+    static ref QUOTES: [u8; 3] = ["'", "\"", "`"].map(|s| {
+        let (out, _, had_errors) = WINDOWS_1252.encode(s);
+        assert!(!had_errors);
+        assert!(out.len() == 1);
+        out[0]
+    });
+    static ref PUNCTUATION: [u8; 9] = [",", ".", ";", ":", "!", "?", "\"", "'", "-"].map(|s| {
+        let (out, _, had_errors) = WINDOWS_1252.encode(s);
+        assert!(!had_errors);
+        assert!(out.len() == 1);
+        out[0]
+    });
+    static ref LINES: [u8; 6] = ["-", "_", "\\", "|", "/", "~"].map(|s| {
+        let (out, _, had_errors) = WINDOWS_1252.encode(s);
+        assert!(!had_errors);
+        assert!(out.len() == 1);
+        out[0]
+    });
 }
 
 // fn memorability_cost(_layout: &Layout, char_idx: &CharIdx) -> f64 {
 //     0.
 // }
 fn memorability_cost(layout: &AnnotatedLayout) -> f64 {
-    let ordered_pairs = [['(', ')'], ['{', '}'], ['[', ']'], ['<', '>']];
-    let ordered_pair_penalty: f64 = ordered_pairs
+    let ordered_pair_penalty: f64 = ORDERED_PAIRS
         .into_iter()
         .filter_map(|[l, r]| {
-            let l = layout.char_idx().get(&l)?;
-            let r = layout.char_idx().get(&r)?;
+            let l = layout.char_idx()[l]?;
+            let r = layout.char_idx()[r]?;
             Some(if l.layer != r.layer || l.shifted != r.shifted {
                 if l.pos != r.pos {
                     // Different key and layer.
@@ -310,30 +408,11 @@ fn memorability_cost(layout: &AnnotatedLayout) -> f64 {
             })
         })
         .sum();
-    let similar_pairs = [
-        ['+', '-'],
-        ['*', '/'],
-        ['+', '*'],
-        ['-', '/'],
-        ['/', '%'],
-        ['\\', '/'],
-        ['\\', '|'],
-        ['/', '|'],
-        ['\'', '"'],
-        ['*', '&'],
-        ['!', '?'],
-        ['.', ','],
-        ['$', '£'],
-        ['-', '_'],
-        ['-', '~'],
-        ['\'', '`'],
-        [';', ':'],
-    ];
-    let similar_pair_penalty: f64 = similar_pairs
+    let similar_pair_penalty: f64 = SIMILAR_PAIRS
         .into_iter()
         .filter_map(|[a, b]| {
-            let a = layout.char_idx().get(&a)?;
-            let b = layout.char_idx().get(&b)?;
+            let a = layout.char_idx()[a]?;
+            let b = layout.char_idx()[b]?;
             Some(if a.layer != b.layer || a.shifted != b.shifted {
                 if a.pos != b.pos {
                     // Different key and layer.
@@ -371,7 +450,7 @@ fn memorability_cost(layout: &AnnotatedLayout) -> f64 {
             })
         })
         .sum();
-    let space_penalty = match layout.char_idx()[&' '].pos {
+    let space_penalty = match layout.char_idx()[*SPACE].unwrap().pos {
         31 => 0.,
         32 => 1.,
         _ => 3.,
@@ -387,42 +466,26 @@ fn memorability_cost(layout: &AnnotatedLayout) -> f64 {
             _ => 2.,
         }
     }
-    let lower_alpha = [
-        'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r',
-        's', 't', 'u', 'v', 'w', 'x', 'y', 'z',
-    ];
-    let upper_alpha = [
-        'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R',
-        'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z',
-    ];
-    let numbers = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
-    let maths_symbols = [
-        '+', '-', '*', '/', '%', '=', '!', '@', '<', '>', '^', '&', '|',
-    ];
-    let brackets = ['(', ')', '{', '}', '[', ']', '<', '>'];
-    let quotes = ['\'', '"', '`'];
-    let punctuation = [',', '.', ';', ':', '!', '?', '\'', '"', '-'];
-    let lines = ['-', '_', '\\', '|', '/', '~'];
     0.01 * ordered_pair_penalty
         + 0.002 * similar_pair_penalty
-        + 0.01 * layer_variation(layout.char_idx(), lower_alpha)
-        + 0.01 * layer_variation(layout.char_idx(), upper_alpha)
-        + 0.01 * layer_variation(layout.char_idx(), numbers)
-        + 0.002 * layer_variation(layout.char_idx(), maths_symbols)
-        + 0.002 * layer_variation(layout.char_idx(), brackets)
-        + 0.002 * layer_variation(layout.char_idx(), quotes)
-        + 0.002 * layer_variation(layout.char_idx(), punctuation)
-        + 0.002 * layer_variation(layout.char_idx(), lines)
+        + 0.01 * layer_variation(layout.char_idx(), *LOWER_ALPHA)
+        + 0.01 * layer_variation(layout.char_idx(), *UPPER_ALPHA)
+        + 0.01 * layer_variation(layout.char_idx(), *NUMBERS)
+        + 0.002 * layer_variation(layout.char_idx(), *MATHS_SYMBOLS)
+        + 0.002 * layer_variation(layout.char_idx(), *BRACKETS)
+        + 0.002 * layer_variation(layout.char_idx(), *QUOTES)
+        + 0.002 * layer_variation(layout.char_idx(), *PUNCTUATION)
+        + 0.002 * layer_variation(layout.char_idx(), *LINES)
         + 0.1 * space_penalty
         + 0.1 * shift_penalty
         + 0.1 * layer_penalty
 }
 
-fn layer_variation(char_idx: &CharIdx, chars: impl IntoIterator<Item = char>) -> f64 {
+fn layer_variation(char_idx: &CharIdx, chars: impl IntoIterator<Item = u8>) -> f64 {
     let layers: Vec<_> = chars
         .into_iter()
         .filter_map(|c| {
-            let at = char_idx.get(&c)?;
+            let at = char_idx[c]?;
             Some((at.layer, at.shifted))
         })
         .collect();

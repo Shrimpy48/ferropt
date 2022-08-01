@@ -1,14 +1,13 @@
+use encoding_rs::WINDOWS_1252;
+use enum_map::EnumMap;
 use rand::{thread_rng, Rng};
 
-use ahash::AHashMap;
-
-use std::any::TypeId;
 use std::collections::VecDeque;
 use std::iter::FusedIterator;
 use std::path::Path;
 use std::{cmp, fs, io};
 
-use crate::simple_cost::{cost_of_typing, layout_cost};
+use crate::cost::{cost_of_typing, layout_cost};
 
 use crate::layout::{Key, Layout, NUM_KEYS};
 
@@ -25,7 +24,7 @@ struct Keys<'l, I> {
 
 impl<'l, I> Iterator for Keys<'l, I>
 where
-    I: Iterator<Item = char>,
+    I: Iterator<Item = u8>,
 {
     type Item = TypingEvent;
 
@@ -35,7 +34,7 @@ where
         }
 
         if let Some(c) = self.chars.next() {
-            match self.layout.char_idx.get(&c).copied() {
+            match self.layout.char_idx[c] {
                 Some(CharIdxEntry {
                     layer,
                     pos,
@@ -117,7 +116,7 @@ where
         (l + self.buf.len(), None)
     }
 }
-impl<'l, I> FusedIterator for Keys<'l, I> where I: FusedIterator + Iterator<Item = char> {}
+impl<'l, I> FusedIterator for Keys<'l, I> where I: FusedIterator + Iterator<Item = u8> {}
 
 #[derive(Clone)]
 struct Oneshot<I> {
@@ -212,7 +211,7 @@ pub enum TypingEvent {
     Unknown,
 }
 
-// fn keys(char_idx: &CharIdx, chars: impl Iterator<Item = char>) -> Vec<(usize, bool, Vec<usize>)> {
+// fn keys(char_idx: &CharIdx, chars: impl Iterator<Item = u8>) -> Vec<(usize, bool, Vec<usize>)> {
 //     let mut out = vec![(0, false, Vec::new())];
 //     for pos in chars.map(|c| char_idx.get(&c).copied()) {
 //         let (cur_layer, cur_shifted, cur_keys) = out.last_mut().unwrap();
@@ -242,7 +241,7 @@ pub enum TypingEvent {
 //     out
 // }
 
-fn keys<I: IntoIterator<Item = char>>(layout: &AnnotatedLayout, chars: I) -> Keys<'_, I::IntoIter> {
+fn keys<I: IntoIterator<Item = u8>>(layout: &AnnotatedLayout, chars: I) -> Keys<'_, I::IntoIter> {
     Keys {
         layout,
         chars: chars.into_iter(),
@@ -342,17 +341,26 @@ fn oneshot<I: IntoIterator<Item = TypingEvent>>(events: I) -> Oneshot<I::IntoIte
 //     out.into_iter()
 // }
 
-pub fn string_cost(layout: &AnnotatedLayout, string: &str) -> (u64, u64) {
+pub fn string_cost(layout: &AnnotatedLayout, string: &[u8]) -> (u64, u64) {
     // let keys = keys(&layout.char_idx, string.chars());
     // let events = key_seq(layout.layer_idx, layout.shift_idx, keys);
 
-    let events = oneshot(keys(layout, string.chars()));
+    let events = oneshot(keys(layout, string.iter().copied()));
 
     cost_of_typing(events)
 }
 
-// Assumes there is only one intended way of typing each character.
-pub type CharIdx = AHashMap<char, CharIdxEntry>;
+/// Interpret a String as a Vec of bytes encoded using Windows_1252, where each byte represents one char.
+/// If any of the chars in the String are not encodable, returns None.
+pub fn to_bytes(string: String) -> Option<Vec<u8>> {
+    let (out, _, had_errors) = WINDOWS_1252.encode(&string);
+
+    (!had_errors).then_some(out.to_vec())
+}
+
+// Assumes there is only one intended way of typing each character,
+// and that all typable characters have a single-byte representation.
+pub type CharIdx = EnumMap<u8, Option<CharIdxEntry>>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CharIdxEntry {
@@ -393,7 +401,7 @@ impl AnnotatedLayout {
 
 impl From<Layout> for AnnotatedLayout {
     fn from(layout: Layout) -> Self {
-        let mut char_idx: AHashMap<_, _> = layout
+        let mut char_idx: CharIdx = layout
             .iter()
             .enumerate()
             .flat_map(|(i, l)| {
@@ -401,11 +409,11 @@ impl From<Layout> for AnnotatedLayout {
                     k.typed_char(true).map(|c| {
                         (
                             c,
-                            CharIdxEntry {
+                            Some(CharIdxEntry {
                                 layer: i,
                                 pos: j,
                                 shifted: true,
-                            },
+                            }),
                         )
                     })
                 })
@@ -416,11 +424,11 @@ impl From<Layout> for AnnotatedLayout {
                 k.typed_char(false).map(|c| {
                     (
                         c,
-                        CharIdxEntry {
+                        Some(CharIdxEntry {
                             layer: i,
                             pos: j,
                             shifted: false,
-                        },
+                        }),
                     )
                 })
             })
@@ -456,7 +464,7 @@ impl From<AnnotatedLayout> for Layout {
     }
 }
 
-fn cost(corpus: &[String], layout: &AnnotatedLayout) -> f64 {
+fn cost(corpus: &[Vec<u8>], layout: &AnnotatedLayout) -> f64 {
     let (t, c) = corpus
         .iter()
         .map(|s| string_cost(layout, s))
@@ -469,20 +477,23 @@ fn cost(corpus: &[String], layout: &AnnotatedLayout) -> f64 {
     t as f64 / c as f64 + layout_cost(layout)
 }
 
-fn read_corpus_impl<P: AsRef<Path>>(corpus: &mut Vec<String>, path: P) -> io::Result<()> {
+fn read_corpus_impl<P: AsRef<Path>>(corpus: &mut Vec<Vec<u8>>, path: P) -> io::Result<()> {
     let path = path.as_ref();
     if path.is_dir() {
         for entry in path.read_dir()? {
             read_corpus_impl(corpus, entry?.path())?;
         }
     } else {
-        corpus.push(fs::read_to_string(path)?);
+        let string = fs::read_to_string(path)?;
+        corpus.push(
+            to_bytes(string).unwrap_or_else(|| panic!("unable to encode {}", path.display())),
+        );
     }
 
     Ok(())
 }
 
-pub fn read_corpus() -> io::Result<Vec<String>> {
+pub fn read_corpus() -> io::Result<Vec<Vec<u8>>> {
     let mut out = Vec::new();
     read_corpus_impl(&mut out, CORPUS_DIR)?;
     Ok(out)
@@ -543,7 +554,7 @@ impl Mutation {
                 let b = layout.layout[l1][j];
 
                 if let Some(c) = a.typed_char(false) {
-                    let entry = layout.char_idx.get_mut(&c).unwrap();
+                    let entry = layout.char_idx[c].as_mut().unwrap();
                     assert_eq!(entry.layer, l0);
                     assert_eq!(entry.pos, i);
                     assert!(!entry.shifted);
@@ -551,7 +562,7 @@ impl Mutation {
                     entry.pos = j;
                 }
                 if let Some(c) = b.typed_char(false) {
-                    let entry = layout.char_idx.get_mut(&c).unwrap();
+                    let entry = layout.char_idx[c].as_mut().unwrap();
                     assert_eq!(entry.layer, l1);
                     assert_eq!(entry.pos, j);
                     assert!(!entry.shifted);
@@ -559,14 +570,14 @@ impl Mutation {
                     entry.pos = i;
                 }
                 if let Some(c) = a.typed_char(true) {
-                    let entry = layout.char_idx.get_mut(&c).unwrap();
+                    let entry = layout.char_idx[c].as_mut().unwrap();
                     if entry.layer == l0 && entry.pos == i && entry.shifted {
                         entry.layer = l1;
                         entry.pos = j;
                     }
                 }
                 if let Some(c) = b.typed_char(true) {
-                    let entry = layout.char_idx.get_mut(&c).unwrap();
+                    let entry = layout.char_idx[c].as_mut().unwrap();
                     if entry.layer == l1 && entry.pos == j && entry.shifted {
                         entry.layer = l0;
                         entry.pos = i;
@@ -621,7 +632,7 @@ const P0: f64 = 1.;
 pub fn optimise(
     n: u32,
     layout: Layout,
-    corpus: &[String],
+    corpus: &[Vec<u8>],
     mut progress_callback: impl FnMut(u32),
 ) -> (Layout, f64) {
     let mut layout: AnnotatedLayout = layout.into();
@@ -757,7 +768,7 @@ mod tests {
             ]
         };
 
-        let actual: Vec<_> = keys(&layout.into(), string.chars()).collect();
+        let actual: Vec<_> = keys(&layout.into(), string.bytes()).collect();
 
         assert_eq!(expected, actual);
     }
@@ -875,7 +886,7 @@ mod tests {
             ]
         };
 
-        let actual: Vec<_> = oneshot(keys(&layout.into(), string.chars())).collect();
+        let actual: Vec<_> = oneshot(keys(&layout.into(), string.bytes())).collect();
 
         assert_eq!(expected, actual);
     }

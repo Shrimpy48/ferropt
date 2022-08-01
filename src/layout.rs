@@ -1,3 +1,4 @@
+use encoding_rs::WINDOWS_1252;
 use enum_map::Enum;
 use serde::{Deserialize, Serialize};
 
@@ -79,112 +80,705 @@ pub enum KeyCode {
     Space,
 }
 
+lazy_static! {
+    static ref A: u8 = {
+        let (out, _, has_errors) = WINDOWS_1252.encode("a");
+        assert!(!has_errors);
+        assert!(out.len() == 1);
+        out[0]
+    };
+    static ref B: u8 = {
+        let (out, _, has_errors) = WINDOWS_1252.encode("b");
+        assert!(!has_errors);
+        assert!(out.len() == 1);
+        out[0]
+    };
+    static ref C: u8 = {
+        let (out, _, has_errors) = WINDOWS_1252.encode("c");
+        assert!(!has_errors);
+        assert!(out.len() == 1);
+        out[0]
+    };
+    static ref D: u8 = {
+        let (out, _, has_errors) = WINDOWS_1252.encode("d");
+        assert!(!has_errors);
+        assert!(out.len() == 1);
+        out[0]
+    };
+    static ref E: u8 = {
+        let (out, _, has_errors) = WINDOWS_1252.encode("e");
+        assert!(!has_errors);
+        assert!(out.len() == 1);
+        out[0]
+    };
+    static ref F: u8 = {
+        let (out, _, has_errors) = WINDOWS_1252.encode("f");
+        assert!(!has_errors);
+        assert!(out.len() == 1);
+        out[0]
+    };
+    static ref G: u8 = {
+        let (out, _, has_errors) = WINDOWS_1252.encode("g");
+        assert!(!has_errors);
+        assert!(out.len() == 1);
+        out[0]
+    };
+    static ref H: u8 = {
+        let (out, _, has_errors) = WINDOWS_1252.encode("h");
+        assert!(!has_errors);
+        assert!(out.len() == 1);
+        out[0]
+    };
+    static ref I: u8 = {
+        let (out, _, has_errors) = WINDOWS_1252.encode("i");
+        assert!(!has_errors);
+        assert!(out.len() == 1);
+        out[0]
+    };
+    static ref J: u8 = {
+        let (out, _, has_errors) = WINDOWS_1252.encode("j");
+        assert!(!has_errors);
+        assert!(out.len() == 1);
+        out[0]
+    };
+    static ref K: u8 = {
+        let (out, _, has_errors) = WINDOWS_1252.encode("k");
+        assert!(!has_errors);
+        assert!(out.len() == 1);
+        out[0]
+    };
+    static ref L: u8 = {
+        let (out, _, has_errors) = WINDOWS_1252.encode("l");
+        assert!(!has_errors);
+        assert!(out.len() == 1);
+        out[0]
+    };
+    static ref M: u8 = {
+        let (out, _, has_errors) = WINDOWS_1252.encode("m");
+        assert!(!has_errors);
+        assert!(out.len() == 1);
+        out[0]
+    };
+    static ref N: u8 = {
+        let (out, _, has_errors) = WINDOWS_1252.encode("n");
+        assert!(!has_errors);
+        assert!(out.len() == 1);
+        out[0]
+    };
+    static ref O: u8 = {
+        let (out, _, has_errors) = WINDOWS_1252.encode("o");
+        assert!(!has_errors);
+        assert!(out.len() == 1);
+        out[0]
+    };
+    static ref P: u8 = {
+        let (out, _, has_errors) = WINDOWS_1252.encode("p");
+        assert!(!has_errors);
+        assert!(out.len() == 1);
+        out[0]
+    };
+    static ref Q: u8 = {
+        let (out, _, has_errors) = WINDOWS_1252.encode("q");
+        assert!(!has_errors);
+        assert!(out.len() == 1);
+        out[0]
+    };
+    static ref R: u8 = {
+        let (out, _, has_errors) = WINDOWS_1252.encode("r");
+        assert!(!has_errors);
+        assert!(out.len() == 1);
+        out[0]
+    };
+    static ref S: u8 = {
+        let (out, _, has_errors) = WINDOWS_1252.encode("s");
+        assert!(!has_errors);
+        assert!(out.len() == 1);
+        out[0]
+    };
+    static ref T: u8 = {
+        let (out, _, has_errors) = WINDOWS_1252.encode("t");
+        assert!(!has_errors);
+        assert!(out.len() == 1);
+        out[0]
+    };
+    static ref U: u8 = {
+        let (out, _, has_errors) = WINDOWS_1252.encode("u");
+        assert!(!has_errors);
+        assert!(out.len() == 1);
+        out[0]
+    };
+    static ref V: u8 = {
+        let (out, _, has_errors) = WINDOWS_1252.encode("v");
+        assert!(!has_errors);
+        assert!(out.len() == 1);
+        out[0]
+    };
+    static ref W: u8 = {
+        let (out, _, has_errors) = WINDOWS_1252.encode("w");
+        assert!(!has_errors);
+        assert!(out.len() == 1);
+        out[0]
+    };
+    static ref X: u8 = {
+        let (out, _, has_errors) = WINDOWS_1252.encode("x");
+        assert!(!has_errors);
+        assert!(out.len() == 1);
+        out[0]
+    };
+    static ref Y: u8 = {
+        let (out, _, has_errors) = WINDOWS_1252.encode("y");
+        assert!(!has_errors);
+        assert!(out.len() == 1);
+        out[0]
+    };
+    static ref Z: u8 = {
+        let (out, _, has_errors) = WINDOWS_1252.encode("z");
+        assert!(!has_errors);
+        assert!(out.len() == 1);
+        out[0]
+    };
+    static ref Digit0: u8 = {
+        let (out, _, has_errors) = WINDOWS_1252.encode("0");
+        assert!(!has_errors);
+        assert!(out.len() == 1);
+        out[0]
+    };
+    static ref Digit1: u8 = {
+        let (out, _, has_errors) = WINDOWS_1252.encode("1");
+        assert!(!has_errors);
+        assert!(out.len() == 1);
+        out[0]
+    };
+    static ref Digit2: u8 = {
+        let (out, _, has_errors) = WINDOWS_1252.encode("2");
+        assert!(!has_errors);
+        assert!(out.len() == 1);
+        out[0]
+    };
+    static ref Digit3: u8 = {
+        let (out, _, has_errors) = WINDOWS_1252.encode("3");
+        assert!(!has_errors);
+        assert!(out.len() == 1);
+        out[0]
+    };
+    static ref Digit4: u8 = {
+        let (out, _, has_errors) = WINDOWS_1252.encode("4");
+        assert!(!has_errors);
+        assert!(out.len() == 1);
+        out[0]
+    };
+    static ref Digit5: u8 = {
+        let (out, _, has_errors) = WINDOWS_1252.encode("5");
+        assert!(!has_errors);
+        assert!(out.len() == 1);
+        out[0]
+    };
+    static ref Digit6: u8 = {
+        let (out, _, has_errors) = WINDOWS_1252.encode("6");
+        assert!(!has_errors);
+        assert!(out.len() == 1);
+        out[0]
+    };
+    static ref Digit7: u8 = {
+        let (out, _, has_errors) = WINDOWS_1252.encode("7");
+        assert!(!has_errors);
+        assert!(out.len() == 1);
+        out[0]
+    };
+    static ref Digit8: u8 = {
+        let (out, _, has_errors) = WINDOWS_1252.encode("8");
+        assert!(!has_errors);
+        assert!(out.len() == 1);
+        out[0]
+    };
+    static ref Digit9: u8 = {
+        let (out, _, has_errors) = WINDOWS_1252.encode("9");
+        assert!(!has_errors);
+        assert!(out.len() == 1);
+        out[0]
+    };
+    static ref Comma: u8 = {
+        let (out, _, has_errors) = WINDOWS_1252.encode(",");
+        assert!(!has_errors);
+        assert!(out.len() == 1);
+        out[0]
+    };
+    static ref Dot: u8 = {
+        let (out, _, has_errors) = WINDOWS_1252.encode(".");
+        assert!(!has_errors);
+        assert!(out.len() == 1);
+        out[0]
+    };
+    static ref Apostrophe: u8 = {
+        let (out, _, has_errors) = WINDOWS_1252.encode("\"");
+        assert!(!has_errors);
+        assert!(out.len() == 1);
+        out[0]
+    };
+    static ref Semicolon: u8 = {
+        let (out, _, has_errors) = WINDOWS_1252.encode(";");
+        assert!(!has_errors);
+        assert!(out.len() == 1);
+        out[0]
+    };
+    static ref Backslash: u8 = {
+        let (out, _, has_errors) = WINDOWS_1252.encode("\\");
+        assert!(!has_errors);
+        assert!(out.len() == 1);
+        out[0]
+    };
+    static ref Slash: u8 = {
+        let (out, _, has_errors) = WINDOWS_1252.encode("/");
+        assert!(!has_errors);
+        assert!(out.len() == 1);
+        out[0]
+    };
+    static ref LeftSquareBracket: u8 = {
+        let (out, _, has_errors) = WINDOWS_1252.encode("[");
+        assert!(!has_errors);
+        assert!(out.len() == 1);
+        out[0]
+    };
+    static ref RightSquareBracket: u8 = {
+        let (out, _, has_errors) = WINDOWS_1252.encode("]");
+        assert!(!has_errors);
+        assert!(out.len() == 1);
+        out[0]
+    };
+    static ref Hash: u8 = {
+        let (out, _, has_errors) = WINDOWS_1252.encode("#");
+        assert!(!has_errors);
+        assert!(out.len() == 1);
+        out[0]
+    };
+    static ref Grave: u8 = {
+        let (out, _, has_errors) = WINDOWS_1252.encode("`");
+        assert!(!has_errors);
+        assert!(out.len() == 1);
+        out[0]
+    };
+    static ref Minus: u8 = {
+        let (out, _, has_errors) = WINDOWS_1252.encode("-");
+        assert!(!has_errors);
+        assert!(out.len() == 1);
+        out[0]
+    };
+    static ref Equals: u8 = {
+        let (out, _, has_errors) = WINDOWS_1252.encode("=");
+        assert!(!has_errors);
+        assert!(out.len() == 1);
+        out[0]
+    };
+    static ref Space: u8 = {
+        let (out, _, has_errors) = WINDOWS_1252.encode(" ");
+        assert!(!has_errors);
+        assert!(out.len() == 1);
+        out[0]
+    };
+}
+lazy_static! {
+    static ref SHIFT_A: u8 = {
+        let (out, _, has_errors) = WINDOWS_1252.encode("A");
+        assert!(!has_errors);
+        assert!(out.len() == 1);
+        out[0]
+    };
+    static ref SHIFT_B: u8 = {
+        let (out, _, has_errors) = WINDOWS_1252.encode("B");
+        assert!(!has_errors);
+        assert!(out.len() == 1);
+        out[0]
+    };
+    static ref SHIFT_C: u8 = {
+        let (out, _, has_errors) = WINDOWS_1252.encode("C");
+        assert!(!has_errors);
+        assert!(out.len() == 1);
+        out[0]
+    };
+    static ref SHIFT_D: u8 = {
+        let (out, _, has_errors) = WINDOWS_1252.encode("D");
+        assert!(!has_errors);
+        assert!(out.len() == 1);
+        out[0]
+    };
+    static ref SHIFT_E: u8 = {
+        let (out, _, has_errors) = WINDOWS_1252.encode("E");
+        assert!(!has_errors);
+        assert!(out.len() == 1);
+        out[0]
+    };
+    static ref SHIFT_F: u8 = {
+        let (out, _, has_errors) = WINDOWS_1252.encode("F");
+        assert!(!has_errors);
+        assert!(out.len() == 1);
+        out[0]
+    };
+    static ref SHIFT_G: u8 = {
+        let (out, _, has_errors) = WINDOWS_1252.encode("G");
+        assert!(!has_errors);
+        assert!(out.len() == 1);
+        out[0]
+    };
+    static ref SHIFT_H: u8 = {
+        let (out, _, has_errors) = WINDOWS_1252.encode("H");
+        assert!(!has_errors);
+        assert!(out.len() == 1);
+        out[0]
+    };
+    static ref SHIFT_I: u8 = {
+        let (out, _, has_errors) = WINDOWS_1252.encode("I");
+        assert!(!has_errors);
+        assert!(out.len() == 1);
+        out[0]
+    };
+    static ref SHIFT_J: u8 = {
+        let (out, _, has_errors) = WINDOWS_1252.encode("J");
+        assert!(!has_errors);
+        assert!(out.len() == 1);
+        out[0]
+    };
+    static ref SHIFT_K: u8 = {
+        let (out, _, has_errors) = WINDOWS_1252.encode("K");
+        assert!(!has_errors);
+        assert!(out.len() == 1);
+        out[0]
+    };
+    static ref SHIFT_L: u8 = {
+        let (out, _, has_errors) = WINDOWS_1252.encode("L");
+        assert!(!has_errors);
+        assert!(out.len() == 1);
+        out[0]
+    };
+    static ref SHIFT_M: u8 = {
+        let (out, _, has_errors) = WINDOWS_1252.encode("M");
+        assert!(!has_errors);
+        assert!(out.len() == 1);
+        out[0]
+    };
+    static ref SHIFT_N: u8 = {
+        let (out, _, has_errors) = WINDOWS_1252.encode("N");
+        assert!(!has_errors);
+        assert!(out.len() == 1);
+        out[0]
+    };
+    static ref SHIFT_O: u8 = {
+        let (out, _, has_errors) = WINDOWS_1252.encode("O");
+        assert!(!has_errors);
+        assert!(out.len() == 1);
+        out[0]
+    };
+    static ref SHIFT_P: u8 = {
+        let (out, _, has_errors) = WINDOWS_1252.encode("P");
+        assert!(!has_errors);
+        assert!(out.len() == 1);
+        out[0]
+    };
+    static ref SHIFT_Q: u8 = {
+        let (out, _, has_errors) = WINDOWS_1252.encode("Q");
+        assert!(!has_errors);
+        assert!(out.len() == 1);
+        out[0]
+    };
+    static ref SHIFT_R: u8 = {
+        let (out, _, has_errors) = WINDOWS_1252.encode("R");
+        assert!(!has_errors);
+        assert!(out.len() == 1);
+        out[0]
+    };
+    static ref SHIFT_S: u8 = {
+        let (out, _, has_errors) = WINDOWS_1252.encode("S");
+        assert!(!has_errors);
+        assert!(out.len() == 1);
+        out[0]
+    };
+    static ref SHIFT_T: u8 = {
+        let (out, _, has_errors) = WINDOWS_1252.encode("T");
+        assert!(!has_errors);
+        assert!(out.len() == 1);
+        out[0]
+    };
+    static ref SHIFT_U: u8 = {
+        let (out, _, has_errors) = WINDOWS_1252.encode("U");
+        assert!(!has_errors);
+        assert!(out.len() == 1);
+        out[0]
+    };
+    static ref SHIFT_V: u8 = {
+        let (out, _, has_errors) = WINDOWS_1252.encode("V");
+        assert!(!has_errors);
+        assert!(out.len() == 1);
+        out[0]
+    };
+    static ref SHIFT_W: u8 = {
+        let (out, _, has_errors) = WINDOWS_1252.encode("W");
+        assert!(!has_errors);
+        assert!(out.len() == 1);
+        out[0]
+    };
+    static ref SHIFT_X: u8 = {
+        let (out, _, has_errors) = WINDOWS_1252.encode("X");
+        assert!(!has_errors);
+        assert!(out.len() == 1);
+        out[0]
+    };
+    static ref SHIFT_Y: u8 = {
+        let (out, _, has_errors) = WINDOWS_1252.encode("Y");
+        assert!(!has_errors);
+        assert!(out.len() == 1);
+        out[0]
+    };
+    static ref SHIFT_Z: u8 = {
+        let (out, _, has_errors) = WINDOWS_1252.encode("Z");
+        assert!(!has_errors);
+        assert!(out.len() == 1);
+        out[0]
+    };
+    static ref SHIFT_Digit0: u8 = {
+        let (out, _, has_errors) = WINDOWS_1252.encode(")");
+        assert!(!has_errors);
+        assert!(out.len() == 1);
+        out[0]
+    };
+    static ref SHIFT_Digit1: u8 = {
+        let (out, _, has_errors) = WINDOWS_1252.encode("!");
+        assert!(!has_errors);
+        assert!(out.len() == 1);
+        out[0]
+    };
+    static ref SHIFT_Digit2: u8 = {
+        let (out, _, has_errors) = WINDOWS_1252.encode("\"");
+        assert!(!has_errors);
+        assert!(out.len() == 1);
+        out[0]
+    };
+    static ref SHIFT_Digit3: u8 = {
+        let (out, _, has_errors) = WINDOWS_1252.encode("£");
+        assert!(!has_errors);
+        assert!(out.len() == 1);
+        out[0]
+    };
+    static ref SHIFT_Digit4: u8 = {
+        let (out, _, has_errors) = WINDOWS_1252.encode("$");
+        assert!(!has_errors);
+        assert!(out.len() == 1);
+        out[0]
+    };
+    static ref SHIFT_Digit5: u8 = {
+        let (out, _, has_errors) = WINDOWS_1252.encode("%");
+        assert!(!has_errors);
+        assert!(out.len() == 1);
+        out[0]
+    };
+    static ref SHIFT_Digit6: u8 = {
+        let (out, _, has_errors) = WINDOWS_1252.encode("^");
+        assert!(!has_errors);
+        assert!(out.len() == 1);
+        out[0]
+    };
+    static ref SHIFT_Digit7: u8 = {
+        let (out, _, has_errors) = WINDOWS_1252.encode("&");
+        assert!(!has_errors);
+        assert!(out.len() == 1);
+        out[0]
+    };
+    static ref SHIFT_Digit8: u8 = {
+        let (out, _, has_errors) = WINDOWS_1252.encode("*");
+        assert!(!has_errors);
+        assert!(out.len() == 1);
+        out[0]
+    };
+    static ref SHIFT_Digit9: u8 = {
+        let (out, _, has_errors) = WINDOWS_1252.encode("(");
+        assert!(!has_errors);
+        assert!(out.len() == 1);
+        out[0]
+    };
+    static ref SHIFT_Comma: u8 = {
+        let (out, _, has_errors) = WINDOWS_1252.encode("<");
+        assert!(!has_errors);
+        assert!(out.len() == 1);
+        out[0]
+    };
+    static ref SHIFT_Dot: u8 = {
+        let (out, _, has_errors) = WINDOWS_1252.encode(">");
+        assert!(!has_errors);
+        assert!(out.len() == 1);
+        out[0]
+    };
+    static ref SHIFT_Apostrophe: u8 = {
+        let (out, _, has_errors) = WINDOWS_1252.encode("@");
+        assert!(!has_errors);
+        assert!(out.len() == 1);
+        out[0]
+    };
+    static ref SHIFT_Semicolon: u8 = {
+        let (out, _, has_errors) = WINDOWS_1252.encode(":");
+        assert!(!has_errors);
+        assert!(out.len() == 1);
+        out[0]
+    };
+    static ref SHIFT_Backslash: u8 = {
+        let (out, _, has_errors) = WINDOWS_1252.encode("|");
+        assert!(!has_errors);
+        assert!(out.len() == 1);
+        out[0]
+    };
+    static ref SHIFT_Slash: u8 = {
+        let (out, _, has_errors) = WINDOWS_1252.encode("?");
+        assert!(!has_errors);
+        assert!(out.len() == 1);
+        out[0]
+    };
+    static ref SHIFT_LeftSquareBracket: u8 = {
+        let (out, _, has_errors) = WINDOWS_1252.encode("{");
+        assert!(!has_errors);
+        assert!(out.len() == 1);
+        out[0]
+    };
+    static ref SHIFT_RightSquareBracket: u8 = {
+        let (out, _, has_errors) = WINDOWS_1252.encode("}");
+        assert!(!has_errors);
+        assert!(out.len() == 1);
+        out[0]
+    };
+    static ref SHIFT_Hash: u8 = {
+        let (out, _, has_errors) = WINDOWS_1252.encode("~");
+        assert!(!has_errors);
+        assert!(out.len() == 1);
+        out[0]
+    };
+    static ref SHIFT_Grave: u8 = {
+        let (out, _, has_errors) = WINDOWS_1252.encode("¬");
+        assert!(!has_errors);
+        assert!(out.len() == 1);
+        out[0]
+    };
+    static ref SHIFT_Minus: u8 = {
+        let (out, _, has_errors) = WINDOWS_1252.encode("_");
+        assert!(!has_errors);
+        assert!(out.len() == 1);
+        out[0]
+    };
+    static ref SHIFT_Equals: u8 = {
+        let (out, _, has_errors) = WINDOWS_1252.encode("+");
+        assert!(!has_errors);
+        assert!(out.len() == 1);
+        out[0]
+    };
+    static ref SHIFT_Space: u8 = {
+        let (out, _, has_errors) = WINDOWS_1252.encode(" ");
+        assert!(!has_errors);
+        assert!(out.len() == 1);
+        out[0]
+    };
+}
+
 impl KeyCode {
-    fn typed_char(self) -> char {
+    fn typed_char(self) -> u8 {
         match self {
-            Self::A => 'a',
-            Self::B => 'b',
-            Self::C => 'c',
-            Self::D => 'd',
-            Self::E => 'e',
-            Self::F => 'f',
-            Self::G => 'g',
-            Self::H => 'h',
-            Self::I => 'i',
-            Self::J => 'j',
-            Self::K => 'k',
-            Self::L => 'l',
-            Self::M => 'm',
-            Self::N => 'n',
-            Self::O => 'o',
-            Self::P => 'p',
-            Self::Q => 'q',
-            Self::R => 'r',
-            Self::S => 's',
-            Self::T => 't',
-            Self::U => 'u',
-            Self::V => 'v',
-            Self::W => 'w',
-            Self::X => 'x',
-            Self::Y => 'y',
-            Self::Z => 'z',
-            Self::Digit0 => '0',
-            Self::Digit1 => '1',
-            Self::Digit2 => '2',
-            Self::Digit3 => '3',
-            Self::Digit4 => '4',
-            Self::Digit5 => '5',
-            Self::Digit6 => '6',
-            Self::Digit7 => '7',
-            Self::Digit8 => '8',
-            Self::Digit9 => '9',
-            Self::Comma => ',',
-            Self::Dot => '.',
-            Self::Apostrophe => '\'',
-            Self::Semicolon => ';',
-            Self::Backslash => '\\',
-            Self::Slash => '/',
-            Self::LeftSquareBracket => '[',
-            Self::RightSquareBracket => ']',
-            Self::Hash => '#',
-            Self::Grave => '`',
-            Self::Minus => '-',
-            Self::Equals => '=',
-            Self::Space => ' ',
+            Self::A => *A,
+            Self::B => *B,
+            Self::C => *C,
+            Self::D => *D,
+            Self::E => *E,
+            Self::F => *F,
+            Self::G => *G,
+            Self::H => *H,
+            Self::I => *I,
+            Self::J => *J,
+            Self::K => *K,
+            Self::L => *L,
+            Self::M => *M,
+            Self::N => *N,
+            Self::O => *O,
+            Self::P => *P,
+            Self::Q => *Q,
+            Self::R => *R,
+            Self::S => *S,
+            Self::T => *T,
+            Self::U => *U,
+            Self::V => *V,
+            Self::W => *W,
+            Self::X => *X,
+            Self::Y => *Y,
+            Self::Z => *Z,
+            Self::Digit0 => *Digit0,
+            Self::Digit1 => *Digit1,
+            Self::Digit2 => *Digit2,
+            Self::Digit3 => *Digit3,
+            Self::Digit4 => *Digit4,
+            Self::Digit5 => *Digit5,
+            Self::Digit6 => *Digit6,
+            Self::Digit7 => *Digit7,
+            Self::Digit8 => *Digit8,
+            Self::Digit9 => *Digit9,
+            Self::Comma => *Comma,
+            Self::Dot => *Dot,
+            Self::Apostrophe => *Apostrophe,
+            Self::Semicolon => *Semicolon,
+            Self::Backslash => *Backslash,
+            Self::Slash => *Slash,
+            Self::LeftSquareBracket => *LeftSquareBracket,
+            Self::RightSquareBracket => *RightSquareBracket,
+            Self::Hash => *Hash,
+            Self::Grave => *Grave,
+            Self::Minus => *Minus,
+            Self::Equals => *Equals,
+            Self::Space => *Space,
         }
     }
 
-    fn shifted_char(self) -> char {
+    fn shifted_char(self) -> u8 {
         match self {
-            Self::A => 'A',
-            Self::B => 'B',
-            Self::C => 'C',
-            Self::D => 'D',
-            Self::E => 'E',
-            Self::F => 'F',
-            Self::G => 'G',
-            Self::H => 'H',
-            Self::I => 'I',
-            Self::J => 'J',
-            Self::K => 'K',
-            Self::L => 'L',
-            Self::M => 'M',
-            Self::N => 'N',
-            Self::O => 'O',
-            Self::P => 'P',
-            Self::Q => 'Q',
-            Self::R => 'R',
-            Self::S => 'S',
-            Self::T => 'T',
-            Self::U => 'U',
-            Self::V => 'V',
-            Self::W => 'W',
-            Self::X => 'X',
-            Self::Y => 'Y',
-            Self::Z => 'Z',
-            Self::Digit0 => ')',
-            Self::Digit1 => '!',
-            Self::Digit2 => '"',
-            Self::Digit3 => '£',
-            Self::Digit4 => '$',
-            Self::Digit5 => '%',
-            Self::Digit6 => '^',
-            Self::Digit7 => '&',
-            Self::Digit8 => '*',
-            Self::Digit9 => '(',
-            Self::Comma => '<',
-            Self::Dot => '>',
-            Self::Apostrophe => '@',
-            Self::Semicolon => ':',
-            Self::Backslash => '|',
-            Self::Slash => '?',
-            Self::LeftSquareBracket => '{',
-            Self::RightSquareBracket => '}',
-            Self::Hash => '~',
-            Self::Grave => '¬',
-            Self::Minus => '_',
-            Self::Equals => '+',
-            Self::Space => ' ',
+            Self::A => *SHIFT_A,
+            Self::B => *SHIFT_B,
+            Self::C => *SHIFT_C,
+            Self::D => *SHIFT_D,
+            Self::E => *SHIFT_E,
+            Self::F => *SHIFT_F,
+            Self::G => *SHIFT_G,
+            Self::H => *SHIFT_H,
+            Self::I => *SHIFT_I,
+            Self::J => *SHIFT_J,
+            Self::K => *SHIFT_K,
+            Self::L => *SHIFT_L,
+            Self::M => *SHIFT_M,
+            Self::N => *SHIFT_N,
+            Self::O => *SHIFT_O,
+            Self::P => *SHIFT_P,
+            Self::Q => *SHIFT_Q,
+            Self::R => *SHIFT_R,
+            Self::S => *SHIFT_S,
+            Self::T => *SHIFT_T,
+            Self::U => *SHIFT_U,
+            Self::V => *SHIFT_V,
+            Self::W => *SHIFT_W,
+            Self::X => *SHIFT_X,
+            Self::Y => *SHIFT_Y,
+            Self::Z => *SHIFT_Z,
+            Self::Digit0 => *SHIFT_Digit0,
+            Self::Digit1 => *SHIFT_Digit1,
+            Self::Digit2 => *SHIFT_Digit2,
+            Self::Digit3 => *SHIFT_Digit3,
+            Self::Digit4 => *SHIFT_Digit4,
+            Self::Digit5 => *SHIFT_Digit5,
+            Self::Digit6 => *SHIFT_Digit6,
+            Self::Digit7 => *SHIFT_Digit7,
+            Self::Digit8 => *SHIFT_Digit8,
+            Self::Digit9 => *SHIFT_Digit9,
+            Self::Comma => *SHIFT_Comma,
+            Self::Dot => *SHIFT_Dot,
+            Self::Apostrophe => *SHIFT_Apostrophe,
+            Self::Semicolon => *SHIFT_Semicolon,
+            Self::Backslash => *SHIFT_Backslash,
+            Self::Slash => *SHIFT_Slash,
+            Self::LeftSquareBracket => *SHIFT_LeftSquareBracket,
+            Self::RightSquareBracket => *SHIFT_RightSquareBracket,
+            Self::Hash => *SHIFT_Hash,
+            Self::Grave => *SHIFT_Grave,
+            Self::Minus => *SHIFT_Minus,
+            Self::Equals => *SHIFT_Equals,
+            Self::Space => *SHIFT_Space,
         }
     }
 }
@@ -315,7 +909,7 @@ pub enum Key {
 }
 
 impl Key {
-    pub fn typed_char(self, shifted: bool) -> Option<char> {
+    pub fn typed_char(self, shifted: bool) -> Option<u8> {
         match self {
             Self::Typing(kc) => Some(if shifted {
                 kc.shifted_char()
