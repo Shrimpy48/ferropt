@@ -1,14 +1,5 @@
-#[cfg(feature = "dhat-heap")]
-#[global_allocator]
-static ALLOC: dhat::Alloc = dhat::Alloc;
-
-mod cost;
-mod evolve;
-mod layout;
-mod simple_cost;
-
-use evolve::*;
-use layout::*;
+use ferropt::evolve::*;
+use ferropt::layout::*;
 
 use rayon::iter;
 use rayon::prelude::*;

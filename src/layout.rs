@@ -1098,7 +1098,7 @@ impl Layout {
         self.iter().any(|l| l.iter().any(|&k| k == key))
     }
 
-    pub(crate) fn hamming_dist(&self, other: &Self) -> u8 {
+    pub fn hamming_dist(&self, other: &Self) -> u8 {
         let self_keys = self.iter().flat_map(|l| l.iter());
         let other_keys = other.iter().flat_map(|l| l.iter());
         self_keys.zip(other_keys).filter(|(a, b)| a != b).count() as u8

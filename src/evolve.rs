@@ -4,7 +4,7 @@ use rand::{thread_rng, Rng};
 
 use std::collections::VecDeque;
 use std::iter::FusedIterator;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::{cmp, fs, io};
 
 use crate::cost::{cost_of_typing, layout_cost};
@@ -14,7 +14,7 @@ use crate::layout::{Key, Layout, NUM_KEYS};
 const CORPUS_DIR: &str = "corpus";
 
 #[derive(Clone)]
-struct Keys<'l, I> {
+pub struct Keys<'l, I> {
     layout: &'l AnnotatedLayout,
     chars: I,
     cur_layer: usize,
@@ -119,7 +119,7 @@ where
 impl<'l, I> FusedIterator for Keys<'l, I> where I: FusedIterator + Iterator<Item = u8> {}
 
 #[derive(Clone)]
-struct Oneshot<I> {
+pub struct Oneshot<I> {
     events: I,
     buf: VecDeque<TypingEvent>,
 }
@@ -241,7 +241,10 @@ pub enum TypingEvent {
 //     out
 // }
 
-fn keys<I: IntoIterator<Item = u8>>(layout: &AnnotatedLayout, chars: I) -> Keys<'_, I::IntoIter> {
+pub fn keys<I: IntoIterator<Item = u8>>(
+    layout: &AnnotatedLayout,
+    chars: I,
+) -> Keys<'_, I::IntoIter> {
     Keys {
         layout,
         chars: chars.into_iter(),
@@ -251,7 +254,7 @@ fn keys<I: IntoIterator<Item = u8>>(layout: &AnnotatedLayout, chars: I) -> Keys<
     }
 }
 
-fn oneshot<I: IntoIterator<Item = TypingEvent>>(events: I) -> Oneshot<I::IntoIter> {
+pub fn oneshot<I: IntoIterator<Item = TypingEvent>>(events: I) -> Oneshot<I::IntoIter> {
     Oneshot {
         events: events.into_iter(),
         buf: VecDeque::new(),
@@ -493,9 +496,35 @@ fn read_corpus_impl<P: AsRef<Path>>(corpus: &mut Vec<Vec<u8>>, path: P) -> io::R
     Ok(())
 }
 
+fn read_named_corpus_impl<P: AsRef<Path>>(
+    corpus: &mut Vec<(PathBuf, Vec<u8>)>,
+    path: P,
+) -> io::Result<()> {
+    let path = path.as_ref();
+    if path.is_dir() {
+        for entry in path.read_dir()? {
+            read_named_corpus_impl(corpus, entry?.path())?;
+        }
+    } else {
+        let string = fs::read_to_string(path)?;
+        corpus.push((
+            path.to_owned(),
+            to_bytes(string).unwrap_or_else(|| panic!("unable to encode {}", path.display())),
+        ));
+    }
+
+    Ok(())
+}
+
 pub fn read_corpus() -> io::Result<Vec<Vec<u8>>> {
     let mut out = Vec::new();
     read_corpus_impl(&mut out, CORPUS_DIR)?;
+    Ok(out)
+}
+
+pub fn read_named_corpus() -> io::Result<Vec<(PathBuf, Vec<u8>)>> {
+    let mut out = Vec::new();
+    read_named_corpus_impl(&mut out, CORPUS_DIR)?;
     Ok(out)
 }
 
