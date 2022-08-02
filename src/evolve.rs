@@ -131,11 +131,10 @@ where
     /// Get the ith element of buf, by extending it if necessary.
     /// Provides arbitrary lookahead to the events iterator.
     fn peek_ith(&mut self, i: usize) -> Option<&TypingEvent> {
-        self.buf.extend(
-            self.events
-                .by_ref()
-                .take((i + 1).saturating_sub(self.buf.len())),
-        );
+        if i >= self.buf.len() {
+            self.buf
+                .extend(self.events.by_ref().take(i + 1 - self.buf.len()));
+        }
         self.buf.get(i)
     }
 }
