@@ -310,7 +310,7 @@ lazy_static! {
         out[0]
     };
     static ref Apostrophe: u8 = {
-        let (out, _, has_errors) = WINDOWS_1252.encode("\"");
+        let (out, _, has_errors) = WINDOWS_1252.encode("'");
         assert!(!has_errors);
         assert!(out.len() == 1);
         out[0]

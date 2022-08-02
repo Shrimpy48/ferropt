@@ -572,73 +572,87 @@ impl Mutation {
 
     fn apply(self, layout: &mut AnnotatedLayout) {
         match self {
-            Self::SwapKeys {
-                mut l0,
-                mut i,
-                mut l1,
-                mut j,
-            } => {
+            Self::SwapKeys { l0, i, l1, j } => {
                 let a = layout.layout[l0][i];
                 let b = layout.layout[l1][j];
 
                 if let Some(c) = a.typed_char(false) {
                     let entry = layout.char_idx[c].as_mut().unwrap();
+                    assert!(!entry.shifted);
                     assert_eq!(entry.layer, l0);
                     assert_eq!(entry.pos, i);
-                    assert!(!entry.shifted);
                     entry.layer = l1;
                     entry.pos = j;
                 }
                 if let Some(c) = b.typed_char(false) {
                     let entry = layout.char_idx[c].as_mut().unwrap();
+                    assert!(!entry.shifted);
                     assert_eq!(entry.layer, l1);
                     assert_eq!(entry.pos, j);
-                    assert!(!entry.shifted);
                     entry.layer = l0;
                     entry.pos = i;
                 }
                 if let Some(c) = a.typed_char(true) {
                     let entry = layout.char_idx[c].as_mut().unwrap();
-                    if entry.layer == l0 && entry.pos == i && entry.shifted {
+                    if entry.shifted {
+                        assert_eq!(entry.layer, l0);
+                        assert_eq!(entry.pos, i);
                         entry.layer = l1;
                         entry.pos = j;
                     }
                 }
                 if let Some(c) = b.typed_char(true) {
                     let entry = layout.char_idx[c].as_mut().unwrap();
-                    if entry.layer == l1 && entry.pos == j && entry.shifted {
+                    if entry.shifted {
+                        assert_eq!(entry.layer, l1);
+                        assert_eq!(entry.pos, j);
                         entry.layer = l0;
                         entry.pos = i;
                     }
                 }
                 if let Key::Layer(layer) = a {
+                    assert_eq!(l0, 0);
                     assert_eq!(layout.layer_idx[layer], i);
                     layout.layer_idx[layer] = j;
                 }
                 if let Key::Layer(layer) = b {
+                    assert_eq!(l1, 0);
                     assert_eq!(layout.layer_idx[layer], j);
                     layout.layer_idx[layer] = i;
                 }
                 if let Key::Shift = a {
+                    assert_eq!(l0, 0);
                     assert_eq!(layout.shift_idx, Some(i));
                     layout.shift_idx = Some(j);
                 }
                 if let Key::Shift = b {
+                    assert_eq!(l1, 0);
                     assert_eq!(layout.shift_idx, Some(j));
                     layout.shift_idx = Some(i);
                 }
 
                 if l0 == l1 {
                     layout.layout[l0].0.swap(i, j);
-                    return;
+                } else {
+                    let (layer_low, layer_high, pos_low, pos_high);
+                    if l0 > l1 {
+                        (layer_low, pos_low, layer_high, pos_high) = (l1, j, l0, i);
+                    } else {
+                        (layer_low, pos_low, layer_high, pos_high) = (l0, i, l1, j);
+                    }
+                    assert!(layer_low < layer_high);
+                    // Split the layers so we can safely have mutable references
+                    // to two parts of it.
+                    let (left, right) = layout.layout.layers.split_at_mut(layer_low + 1);
+                    assert_eq!(left.len(), layer_low + 1);
+                    std::mem::swap(
+                        &mut left.last_mut().unwrap()[pos_low],
+                        &mut right[layer_high - layer_low - 1][pos_high],
+                    );
                 }
-                if l0 > l1 {
-                    (l0, i, l1, j) = (l1, j, l0, i);
-                }
-                // Split the layers so we can safely have mutable references
-                // to two parts of it.
-                let (left, right) = layout.layout.layers.split_at_mut(l0 + 1);
-                std::mem::swap(&mut left.last_mut().unwrap()[i], &mut right[l1 - l0 - 1][j]);
+
+                assert_eq!(b, layout.layout[l0][i]);
+                assert_eq!(a, layout.layout[l1][j]);
             } // Self::SwapPaired { l0, l1, i, j } => {
               //     layout[l0].0.swap(i, j);
               //     layout[l1].0.swap(i, j);
