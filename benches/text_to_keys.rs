@@ -3,7 +3,7 @@ use std::fs::File;
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 
 use ferropt::{
-    evolve::{keys, oneshot, read_named_corpus, AnnotatedLayout},
+    evolve::{keys, lookahead, oneshot, read_named_corpus, AnnotatedLayout},
     layout::Layout,
 };
 
@@ -37,7 +37,7 @@ fn oneshot_bench(c: &mut Criterion) {
         group.bench_with_input(
             BenchmarkId::new("oneshot", path.display()),
             &events,
-            |b, e| b.iter(|| oneshot(e.iter().copied()).for_each(|_| {})),
+            |b, e| b.iter(|| oneshot(lookahead(e.iter().copied())).for_each(|_| {})),
         );
     }
     group.finish();

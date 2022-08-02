@@ -1,6 +1,8 @@
 use encoding_rs::WINDOWS_1252;
 use enum_map::EnumMap;
 use rand::{thread_rng, Rng};
+use serde::__private::de::EnumDeserializer;
+use serde_json::Result;
 
 use std::collections::VecDeque;
 use std::iter::FusedIterator;
@@ -22,17 +24,19 @@ pub struct Keys<'l, I> {
     buf: VecDeque<TypingEvent>,
 }
 
-impl<'l, I> Iterator for Keys<'l, I>
+impl<'l, I> Keys<'l, I>
 where
     I: Iterator<Item = u8>,
 {
-    type Item = TypingEvent;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if let Some(e) = self.buf.pop_front() {
-            return Some(e);
+    fn extend_buf_to(&mut self, n: usize) {
+        while self.buf.len() <= n {
+            if !self.handle_next() {
+                break;
+            }
         }
+    }
 
+    fn handle_next(&mut self) -> bool {
         if let Some(c) = self.chars.next() {
             match self.layout.char_idx[c] {
                 Some(CharIdxEntry {
@@ -74,7 +78,7 @@ where
                         pos,
                         for_char: true,
                     });
-                    self.buf.pop_front()
+                    true
                 }
                 None => {
                     // An untypable character.
@@ -89,7 +93,7 @@ where
                         self.cur_shifted = false;
                     }
                     self.buf.push_back(TypingEvent::Unknown);
-                    self.buf.pop_front()
+                    true
                 }
             }
         } else {
@@ -104,8 +108,25 @@ where
                     .push_back(TypingEvent::Release(self.layout.shift_idx.unwrap()));
                 self.cur_shifted = false;
             }
-            self.buf.pop_front()
+            false
         }
+    }
+}
+
+impl<'l, I> Iterator for Keys<'l, I>
+where
+    I: Iterator<Item = u8>,
+{
+    type Item = TypingEvent;
+
+    #[inline]
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some(e) = self.buf.pop_front() {
+            return Some(e);
+        }
+
+        self.handle_next();
+        self.buf.pop_front()
     }
 
     /// At least one keypress will be yielded for each character in the input,
@@ -118,46 +139,132 @@ where
 }
 impl<'l, I> FusedIterator for Keys<'l, I> where I: FusedIterator + Iterator<Item = u8> {}
 
+impl<'l, I> LookaheadIterator for Keys<'l, I>
+where
+    I: Iterator<Item = u8>,
+{
+    fn peek_nth(&mut self, n: usize) -> Option<&Self::Item> {
+        self.extend_buf_to(n);
+        self.buf.get(n)
+    }
+
+    fn remove_nth(&mut self, n: usize) -> Option<Self::Item> {
+        self.extend_buf_to(n);
+        self.buf.remove(n)
+    }
+}
+
+pub trait LookaheadIterator: Iterator {
+    /// Peek at the nth element of the iterator.
+    ///
+    /// This will _not_ consume any elements from the iterator,
+    /// but may consume from an underlying one.
+    fn peek_nth(&mut self, n: usize) -> Option<&Self::Item>;
+
+    /// Pop the nth element of the iterator.
+    ///
+    /// This will consume _only_ the nth element, not any earlier ones.
+    fn remove_nth(&mut self, n: usize) -> Option<Self::Item>;
+}
+
+#[derive(Clone)]
+pub struct NPeekable<I: Iterator> {
+    inner: I,
+    buf: VecDeque<I::Item>,
+}
+
+impl<I: Iterator> NPeekable<I> {
+    fn extend_buf_to(&mut self, n: usize) {
+        if n >= self.buf.len() {
+            self.buf
+                .extend(self.inner.by_ref().take(n + 1 - self.buf.len()));
+        }
+    }
+}
+
+impl<I: Iterator> Iterator for NPeekable<I> {
+    type Item = I::Item;
+
+    #[inline]
+    fn next(&mut self) -> Option<Self::Item> {
+        if let elem @ Some(_) = self.buf.pop_front() {
+            return elem;
+        }
+
+        self.inner.next()
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let (lower, upper) = self.inner.size_hint();
+        let buf_len = self.buf.len();
+        (
+            lower.saturating_add(buf_len),
+            upper.map(|u| u.saturating_add(buf_len)),
+        )
+    }
+
+    fn count(self) -> usize {
+        self.buf.len() + self.inner.count()
+    }
+
+    fn last(mut self) -> Option<Self::Item> {
+        self.inner.last().or_else(|| self.buf.pop_back())
+    }
+
+    fn nth(&mut self, n: usize) -> Option<Self::Item> {
+        if n < self.buf.len() {
+            self.buf.drain(..=n).next_back()
+        } else {
+            let out = self.inner.nth(n - self.buf.len());
+            self.buf.clear();
+            out
+        }
+    }
+
+    fn fold<B, F>(self, init: B, mut f: F) -> B
+    where
+        F: FnMut(B, Self::Item) -> B,
+    {
+        let accum = self.buf.into_iter().fold(init, &mut f);
+        self.inner.fold(accum, f)
+    }
+}
+
+impl<I: Iterator> LookaheadIterator for NPeekable<I> {
+    fn peek_nth(&mut self, n: usize) -> Option<&Self::Item> {
+        self.extend_buf_to(n);
+        self.buf.get(n)
+    }
+
+    fn remove_nth(&mut self, n: usize) -> Option<Self::Item> {
+        self.extend_buf_to(n);
+        self.buf.remove(n)
+    }
+}
+
 #[derive(Clone)]
 pub struct Oneshot<I> {
     events: I,
-    buf: VecDeque<TypingEvent>,
-}
-
-impl<I> Oneshot<I>
-where
-    I: Iterator<Item = TypingEvent>,
-{
-    /// Get the ith element of buf, by extending it if necessary.
-    /// Provides arbitrary lookahead to the events iterator.
-    fn peek_ith(&mut self, i: usize) -> Option<&TypingEvent> {
-        if i >= self.buf.len() {
-            self.buf
-                .extend(self.events.by_ref().take(i + 1 - self.buf.len()));
-        }
-        self.buf.get(i)
-    }
 }
 
 impl<I> Iterator for Oneshot<I>
 where
-    I: Iterator<Item = TypingEvent>,
+    I: LookaheadIterator + Iterator<Item = TypingEvent>,
 {
     type Item = TypingEvent;
 
+    #[inline]
     fn next(&mut self) -> Option<Self::Item> {
         loop {
-            match self.peek_ith(0).copied() {
-                None => return None,
+            match self.events.next() {
                 Some(TypingEvent::Hold(pos)) => {
                     let mut used = false;
-                    for i in 1.. {
-                        match self.peek_ith(i).copied() {
+                    for i in 0.. {
+                        match self.events.peek_nth(i).copied() {
                             None => panic!("{pos} held but not released"),
                             Some(TypingEvent::Tap { .. } | TypingEvent::Unknown) => {
                                 if used {
                                     // The hold is used for multiple keys, so should stay a hold.
-                                    self.buf.pop_front();
                                     return Some(TypingEvent::Hold(pos));
                                 }
                                 used = true;
@@ -168,13 +275,11 @@ where
                                         // The hold is not actually doing anything, so remove it.
                                         // This will break if modifiers require other modifiers to be held,
                                         // for eg. if they are not on the home layer.
-                                        self.buf.remove(i);
-                                        self.buf.remove(0);
+                                        self.events.remove_nth(i);
                                     }
                                     true => {
                                         // The hold is used for 1 tap, so should be oneshot.
-                                        self.buf.remove(i);
-                                        self.buf.pop_front();
+                                        self.events.remove_nth(i);
                                         return Some(TypingEvent::Tap {
                                             pos,
                                             for_char: false,
@@ -186,9 +291,8 @@ where
                         }
                     }
                 }
-                Some(e) => {
-                    self.buf.pop_front();
-                    return Some(e);
+                e => {
+                    return e;
                 }
             }
         }
@@ -197,10 +301,13 @@ where
     /// At most one event will be yielded for each event in the input.
     fn size_hint(&self) -> (usize, Option<usize>) {
         let (_, u) = self.events.size_hint();
-        (0, u.map(|u| u + self.buf.len()))
+        (0, u)
     }
 }
-impl<I> FusedIterator for Oneshot<I> where I: FusedIterator + Iterator<Item = TypingEvent> {}
+impl<I> FusedIterator for Oneshot<I> where
+    I: FusedIterator + LookaheadIterator + Iterator<Item = TypingEvent>
+{
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TypingEvent {
@@ -253,9 +360,22 @@ pub fn keys<I: IntoIterator<Item = u8>>(
     }
 }
 
-pub fn oneshot<I: IntoIterator<Item = TypingEvent>>(events: I) -> Oneshot<I::IntoIter> {
+pub fn oneshot<I>(events: I) -> Oneshot<I::IntoIter>
+where
+    I: IntoIterator<Item = TypingEvent>,
+    I::IntoIter: LookaheadIterator,
+{
     Oneshot {
         events: events.into_iter(),
+    }
+}
+
+pub fn lookahead<I>(iter: I) -> NPeekable<I::IntoIter>
+where
+    I: IntoIterator,
+{
+    NPeekable {
+        inner: iter.into_iter(),
         buf: VecDeque::new(),
     }
 }
@@ -347,7 +467,7 @@ pub fn string_cost(layout: &AnnotatedLayout, string: &[u8]) -> (u64, u64) {
     // let keys = keys(&layout.char_idx, string.chars());
     // let events = key_seq(layout.layer_idx, layout.shift_idx, keys);
 
-    let events = oneshot(keys(layout, string.iter().copied()));
+    let events = oneshot(lookahead(keys(layout, string.iter().copied())));
 
     cost_of_typing(events)
 }
@@ -928,7 +1048,7 @@ mod tests {
             ]
         };
 
-        let actual: Vec<_> = oneshot(keys(&layout.into(), string.bytes())).collect();
+        let actual: Vec<_> = oneshot(lookahead(keys(&layout.into(), string.bytes()))).collect();
 
         assert_eq!(expected, actual);
     }
