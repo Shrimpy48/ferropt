@@ -11,8 +11,8 @@ use crate::{
 #[derive(Debug, Clone, Copy)]
 struct LastUsedEntry {
     at: Option<NonZeroU64>,
-    row: usize,
-    col: usize,
+    row: u8,
+    col: u8,
 }
 
 pub fn cost_of_typing(keys: impl Iterator<Item = TypingEvent>) -> (u64, u64) {

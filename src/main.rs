@@ -47,7 +47,7 @@ fn main() -> io::Result<()> {
     Ok(())
 }
 
-fn run_trials(args: &Args, corpus: &[Vec<u8>], layout: &Layout) -> (Layout, f64) {
+fn run_trials(args: &Args, corpus: &[Vec<Win1252Char>], layout: &Layout) -> (Layout, f64) {
     let start = Instant::now();
 
     let results: Vec<_> = if args.quiet {

@@ -10,20 +10,20 @@ use std::{cmp, fs, io};
 use crate::cost::cost_of_typing;
 use crate::cost::layout_cost;
 
-use crate::layout::{Key, Layout, NUM_KEYS};
+use crate::layout::{Key, Layout, Win1252Char, NUM_KEYS};
 
 #[derive(Clone)]
 pub struct Keys<'l, I> {
     layout: &'l AnnotatedLayout,
     chars: I,
-    cur_layer: usize,
+    cur_layer: u8,
     cur_shifted: bool,
     buf: VecDeque<TypingEvent>,
 }
 
 impl<'l, I> Keys<'l, I>
 where
-    I: Iterator<Item = u8>,
+    I: Iterator<Item = Win1252Char>,
 {
     fn extend_buf_to(&mut self, n: usize) {
         while self.buf.len() <= n {
@@ -43,8 +43,9 @@ where
                 }) => {
                     // A typable character.
                     if self.cur_layer != 0 && layer != self.cur_layer {
-                        self.buf
-                            .push_back(TypingEvent::Release(self.layout.layer_idx[self.cur_layer]));
+                        self.buf.push_back(TypingEvent::Release(
+                            self.layout.layer_idx[self.cur_layer as usize],
+                        ));
                         self.cur_layer = 0;
                     }
                     if self.cur_shifted && !shifted {
@@ -57,7 +58,7 @@ where
                         // The shift key is on the home layer.
                         if self.cur_layer != 0 {
                             self.buf.push_back(TypingEvent::Release(
-                                self.layout.layer_idx[self.cur_layer],
+                                self.layout.layer_idx[self.cur_layer as usize],
                             ));
                             self.cur_layer = 0;
                         }
@@ -67,7 +68,7 @@ where
                     }
                     if layer != 0 && self.cur_layer != layer {
                         self.buf
-                            .push_back(TypingEvent::Hold(self.layout.layer_idx[layer]));
+                            .push_back(TypingEvent::Hold(self.layout.layer_idx[layer as usize]));
                         self.cur_layer = layer;
                     }
 
@@ -80,8 +81,9 @@ where
                 None => {
                     // An untypable character.
                     if self.cur_layer != 0 {
-                        self.buf
-                            .push_back(TypingEvent::Release(self.layout.layer_idx[self.cur_layer]));
+                        self.buf.push_back(TypingEvent::Release(
+                            self.layout.layer_idx[self.cur_layer as usize],
+                        ));
                         self.cur_layer = 0;
                     }
                     if self.cur_shifted {
@@ -96,8 +98,9 @@ where
         } else {
             // No more characters.
             if self.cur_layer != 0 {
-                self.buf
-                    .push_back(TypingEvent::Release(self.layout.layer_idx[self.cur_layer]));
+                self.buf.push_back(TypingEvent::Release(
+                    self.layout.layer_idx[self.cur_layer as usize],
+                ));
                 self.cur_layer = 0;
             }
             if self.cur_shifted {
@@ -112,7 +115,7 @@ where
 
 impl<'l, I> Iterator for Keys<'l, I>
 where
-    I: Iterator<Item = u8>,
+    I: Iterator<Item = Win1252Char>,
 {
     type Item = TypingEvent;
 
@@ -134,11 +137,11 @@ where
         (l + self.buf.len(), None)
     }
 }
-impl<'l, I> FusedIterator for Keys<'l, I> where I: FusedIterator + Iterator<Item = u8> {}
+impl<'l, I> FusedIterator for Keys<'l, I> where I: FusedIterator + Iterator<Item = Win1252Char> {}
 
 impl<'l, I> LookaheadIterator for Keys<'l, I>
 where
-    I: Iterator<Item = u8>,
+    I: Iterator<Item = Win1252Char>,
 {
     fn peek_nth(&mut self, n: usize) -> Option<&Self::Item> {
         self.extend_buf_to(n);
@@ -308,43 +311,13 @@ impl<I> FusedIterator for Oneshot<I> where
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TypingEvent {
-    Tap { pos: usize, for_char: bool },
-    Hold(usize),
-    Release(usize),
+    Tap { pos: u8, for_char: bool },
+    Hold(u8),
+    Release(u8),
     Unknown,
 }
 
-// fn keys(char_idx: &CharIdx, chars: impl Iterator<Item = u8>) -> Vec<(usize, bool, Vec<usize>)> {
-//     let mut out = vec![(0, false, Vec::new())];
-//     for pos in chars.map(|c| char_idx.get(&c).copied()) {
-//         let (cur_layer, cur_shifted, cur_keys) = out.last_mut().unwrap();
-//         match pos {
-//             Some(CharIdxEntry {
-//                 layer,
-//                 pos,
-//                 shifted,
-//             }) => {
-//                 if layer == *cur_layer && shifted == *cur_shifted {
-//                     cur_keys.push(pos);
-//                 } else {
-//                     out.push((layer, shifted, vec![pos]));
-//                 }
-//             }
-//             None if !cur_keys.is_empty() => {
-//                 // Add an empty Vec to indicate the unknown character.
-//                 out.push((0, false, Vec::new()));
-//                 out.push((0, false, Vec::new()));
-//             }
-//             None => {}
-//         }
-//     }
-//     if out.last().unwrap().2.is_empty() {
-//         out.pop();
-//     }
-//     out
-// }
-
-pub fn keys<I: IntoIterator<Item = u8>>(
+pub fn keys<I: IntoIterator<Item = Win1252Char>>(
     layout: &AnnotatedLayout,
     chars: I,
 ) -> Keys<'_, I::IntoIter> {
@@ -377,90 +350,7 @@ where
     }
 }
 
-// Assumes the layer and shift keys are on the home layer.
-// fn key_seq(
-//     layer_idx: [usize; NUM_LAYERS],
-//     shift_idx: Option<usize>,
-//     key_groups: impl IntoIterator<Item = (usize, bool, Vec<usize>)>,
-// ) -> impl Iterator<Item = TypingEvent> {
-//     let mut out = Vec::new();
-//     let mut cur_layer = 0;
-//     let mut cur_shifted = false;
-//     for (layer, shifted, keys) in key_groups {
-//         if keys.is_empty() {
-//             out.push(TypingEvent::Unknown);
-//             if cur_layer != 0 {
-//                 out.push(TypingEvent::Release(layer_idx[cur_layer]));
-//                 cur_layer = 0;
-//             }
-//             if cur_shifted {
-//                 out.push(TypingEvent::Release(shift_idx.unwrap()));
-//                 cur_shifted = false;
-//             }
-//             continue;
-//         }
-//         if cur_layer != 0 && layer != cur_layer {
-//             out.push(TypingEvent::Release(layer_idx[cur_layer]));
-//             cur_layer = 0;
-//         }
-//         if cur_shifted && !shifted {
-//             out.push(TypingEvent::Release(shift_idx.unwrap()));
-//             cur_shifted = false;
-//         }
-//         if keys.len() == 1 {
-//             if shifted && !cur_shifted {
-//                 if cur_layer != 0 {
-//                     out.push(TypingEvent::Release(layer_idx[cur_layer]));
-//                     cur_layer = 0;
-//                 }
-//                 out.push(TypingEvent::Tap {
-//                     pos: shift_idx.unwrap(),
-//                     for_char: false,
-//                 });
-//                 cur_shifted = false;
-//             }
-//             if layer != 0 && layer != cur_layer {
-//                 out.push(TypingEvent::Tap {
-//                     pos: layer_idx[layer],
-//                     for_char: false,
-//                 });
-//                 cur_layer = 0;
-//             }
-//             out.push(TypingEvent::Tap {
-//                 pos: keys[0],
-//                 for_char: true,
-//             });
-//         } else {
-//             if shifted && !cur_shifted {
-//                 if cur_layer != 0 {
-//                     out.push(TypingEvent::Release(layer_idx[cur_layer]));
-//                     cur_layer = 0;
-//                 }
-//                 out.push(TypingEvent::Hold(shift_idx.unwrap()));
-//                 cur_shifted = true;
-//             }
-//             if layer != 0 && layer != cur_layer {
-//                 out.push(TypingEvent::Hold(layer_idx[layer]));
-//                 cur_layer = layer;
-//             }
-//             for key in keys {
-//                 out.push(TypingEvent::Tap {
-//                     pos: key,
-//                     for_char: true,
-//                 });
-//             }
-//         }
-//     }
-//     if cur_layer != 0 {
-//         out.push(TypingEvent::Release(layer_idx[cur_layer]));
-//     }
-//     if cur_shifted {
-//         out.push(TypingEvent::Release(shift_idx.unwrap()));
-//     }
-//     out.into_iter()
-// }
-
-pub fn string_cost(layout: &AnnotatedLayout, string: &[u8]) -> (u64, u64) {
+pub fn string_cost(layout: &AnnotatedLayout, string: &[Win1252Char]) -> (u64, u64) {
     // let keys = keys(&layout.char_idx, string.chars());
     // let events = key_seq(layout.layer_idx, layout.shift_idx, keys);
 
@@ -471,20 +361,22 @@ pub fn string_cost(layout: &AnnotatedLayout, string: &[u8]) -> (u64, u64) {
 
 /// Interpret a String as a Vec of bytes encoded using Windows_1252, where each byte represents one char.
 /// If any of the chars in the String are not encodable, returns None.
-pub fn to_bytes(string: String) -> Option<Vec<u8>> {
+pub fn to_bytes(string: String) -> Option<Vec<Win1252Char>> {
     let (out, _, had_errors) = WINDOWS_1252.encode(&string);
 
-    (!had_errors).then_some(out.to_vec())
+    // SAFETY: Win1252_char is a repr(transparent) wrapper of u8
+    // and the bytes came from WINDOWS_1252::encode, so they are valid.
+    (!had_errors).then_some(unsafe { std::mem::transmute(out.to_vec()) })
 }
 
 // Assumes there is only one intended way of typing each character,
 // and that all typable characters have a single-byte representation.
-pub type CharIdx = EnumMap<u8, Option<CharIdxEntry>>;
+pub type CharIdx = EnumMap<Win1252Char, Option<CharIdxEntry>>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CharIdxEntry {
-    pub layer: usize,
-    pub pos: usize,
+    pub layer: u8,
+    pub pos: u8,
     pub shifted: bool,
 }
 
@@ -492,8 +384,8 @@ pub struct CharIdxEntry {
 pub struct AnnotatedLayout {
     layout: Layout,
     char_idx: CharIdx,
-    layer_idx: Vec<usize>,
-    shift_idx: Option<usize>,
+    layer_idx: Vec<u8>,
+    shift_idx: Option<u8>,
 }
 
 impl AnnotatedLayout {
@@ -505,26 +397,25 @@ impl AnnotatedLayout {
         &self.char_idx
     }
 
-    pub fn layer_idx(&self) -> &[usize] {
+    pub fn layer_idx(&self) -> &[u8] {
         &self.layer_idx
     }
 
-    pub fn shift_idx(&self) -> &Option<usize> {
+    pub fn shift_idx(&self) -> &Option<u8> {
         &self.shift_idx
     }
 
-    pub fn num_layers(&self) -> usize {
-        self.layout.layers.len()
+    pub fn num_layers(&self) -> u8 {
+        self.layout.layers.len() as u8
     }
 }
 
 impl From<Layout> for AnnotatedLayout {
     fn from(layout: Layout) -> Self {
-        let mut char_idx: CharIdx = layout
-            .iter()
-            .enumerate()
+        let mut char_idx: CharIdx = (0..)
+            .zip(layout.iter())
             .flat_map(|(i, l)| {
-                l.iter().enumerate().filter_map(move |(j, k)| {
+                (0..).zip(l.iter()).filter_map(move |(j, k)| {
                     k.typed_char(true).map(|c| {
                         (
                             c,
@@ -538,8 +429,8 @@ impl From<Layout> for AnnotatedLayout {
                 })
             })
             .collect();
-        char_idx.extend(layout.iter().enumerate().flat_map(|(i, l)| {
-            l.iter().enumerate().filter_map(move |(j, k)| {
+        char_idx.extend((0..).zip(layout.iter()).flat_map(|(i, l)| {
+            (0..).zip(l.iter()).filter_map(move |(j, k)| {
                 k.typed_char(false).map(|c| {
                     (
                         c,
@@ -553,9 +444,8 @@ impl From<Layout> for AnnotatedLayout {
             })
         }));
 
-        let layer_idx = layout[0]
-            .iter()
-            .enumerate()
+        let layer_idx = (0..)
+            .zip(layout[0].iter())
             .filter_map(move |(j, k)| match k {
                 Key::Layer(n) => Some((*n, j)),
                 _ => None,
@@ -564,9 +454,8 @@ impl From<Layout> for AnnotatedLayout {
                 a[n] = j;
                 a
             });
-        let shift_idx = layout[0]
-            .iter()
-            .enumerate()
+        let shift_idx = (0..)
+            .zip(layout[0].iter())
             .find_map(|(i, k)| matches!(k, Key::Shift).then_some(i));
         Self {
             layout,
@@ -583,7 +472,7 @@ impl From<AnnotatedLayout> for Layout {
     }
 }
 
-fn cost(corpus: &[Vec<u8>], layout: &AnnotatedLayout) -> f64 {
+fn cost(corpus: &[Vec<Win1252Char>], layout: &AnnotatedLayout) -> f64 {
     let (t, c) = corpus
         .iter()
         .map(|s| string_cost(layout, s))
@@ -596,7 +485,7 @@ fn cost(corpus: &[Vec<u8>], layout: &AnnotatedLayout) -> f64 {
     t as f64 / c as f64 + layout_cost(layout)
 }
 
-fn read_corpus_impl<P: AsRef<Path>>(corpus: &mut Vec<Vec<u8>>, path: P) -> io::Result<()> {
+fn read_corpus_impl<P: AsRef<Path>>(corpus: &mut Vec<Vec<Win1252Char>>, path: P) -> io::Result<()> {
     let path = path.as_ref();
     if path.is_dir() {
         for entry in path.read_dir()? {
@@ -613,7 +502,7 @@ fn read_corpus_impl<P: AsRef<Path>>(corpus: &mut Vec<Vec<u8>>, path: P) -> io::R
 }
 
 fn read_named_corpus_impl<P: AsRef<Path>>(
-    corpus: &mut Vec<(PathBuf, Vec<u8>)>,
+    corpus: &mut Vec<(PathBuf, Vec<Win1252Char>)>,
     path: P,
 ) -> io::Result<()> {
     let path = path.as_ref();
@@ -632,13 +521,13 @@ fn read_named_corpus_impl<P: AsRef<Path>>(
     Ok(())
 }
 
-pub fn read_corpus<P: AsRef<Path>>(path: P) -> io::Result<Vec<Vec<u8>>> {
+pub fn read_corpus<P: AsRef<Path>>(path: P) -> io::Result<Vec<Vec<Win1252Char>>> {
     let mut out = Vec::new();
     read_corpus_impl(&mut out, path)?;
     Ok(out)
 }
 
-pub fn read_named_corpus<P: AsRef<Path>>(path: P) -> io::Result<Vec<(PathBuf, Vec<u8>)>> {
+pub fn read_named_corpus<P: AsRef<Path>>(path: P) -> io::Result<Vec<(PathBuf, Vec<Win1252Char>)>> {
     let mut out = Vec::new();
     read_named_corpus_impl(&mut out, path)?;
     Ok(out)
@@ -646,17 +535,12 @@ pub fn read_named_corpus<P: AsRef<Path>>(path: P) -> io::Result<Vec<(PathBuf, Ve
 
 #[derive(Debug, Clone, Copy)]
 enum Mutation {
-    SwapKeys {
-        l0: usize,
-        l1: usize,
-        i: usize,
-        j: usize,
-    },
+    SwapKeys { l0: u8, l1: u8, i: u8, j: u8 },
     // SwapPaired {
-    //     l0: usize,
-    //     l1: usize,
-    //     i: usize,
-    //     j: usize,
+    //     l0: u8,
+    //     l1: u8,
+    //     i: u8,
+    //     j: u8,
     // },
 }
 
@@ -749,7 +633,7 @@ impl Mutation {
                 }
 
                 if l0 == l1 {
-                    layout.layout[l0].0.swap(i, j);
+                    layout.layout[l0].0.swap(i as usize, j as usize);
                 } else {
                     let (layer_low, layer_high, pos_low, pos_high);
                     if l0 > l1 {
@@ -760,11 +644,11 @@ impl Mutation {
                     assert!(layer_low < layer_high);
                     // Split the layers so we can safely have mutable references
                     // to two parts of it.
-                    let (left, right) = layout.layout.layers.split_at_mut(layer_low + 1);
-                    assert_eq!(left.len(), layer_low + 1);
+                    let (left, right) = layout.layout.layers.split_at_mut(layer_low as usize + 1);
+                    assert_eq!(left.len(), layer_low as usize + 1);
                     std::mem::swap(
                         &mut left.last_mut().unwrap()[pos_low],
-                        &mut right[layer_high - layer_low - 1][pos_high],
+                        &mut right[(layer_high - layer_low) as usize - 1][pos_high],
                     );
                 }
 
@@ -791,7 +675,7 @@ const P0: f64 = 1.;
 pub fn optimise(
     n: u32,
     layout: Layout,
-    corpus: &[Vec<u8>],
+    corpus: &[Vec<Win1252Char>],
     mut progress_callback: impl FnMut(u32),
 ) -> (Layout, f64) {
     let mut layout: AnnotatedLayout = layout.into();
@@ -832,7 +716,7 @@ mod tests {
     fn keys_helloworld() {
         let f = File::open("qwerty.json").unwrap();
         let layout: Layout = serde_json::from_reader(f).unwrap();
-        let string = "Hello, WORLD! (~1)";
+        let string = "Hello, WORLD! (~1)".to_owned();
         let expected = {
             use TypingEvent::*;
             vec![
@@ -927,7 +811,7 @@ mod tests {
             ]
         };
 
-        let actual: Vec<_> = keys(&layout.into(), string.bytes()).collect();
+        let actual: Vec<_> = keys(&layout.into(), to_bytes(string).unwrap()).collect();
 
         assert_eq!(expected, actual);
     }
@@ -936,7 +820,7 @@ mod tests {
     fn oneshot_helloworld() {
         let f = File::open("qwerty.json").unwrap();
         let layout: Layout = serde_json::from_reader(f).unwrap();
-        let string = "Hello, WORLD! (~1)";
+        let string = "Hello, WORLD! (~1)".to_owned();
         let expected = {
             use TypingEvent::*;
             vec![
@@ -1045,7 +929,7 @@ mod tests {
             ]
         };
 
-        let actual: Vec<_> = oneshot(keys(&layout.into(), string.bytes())).collect();
+        let actual: Vec<_> = oneshot(keys(&layout.into(), to_bytes(string).unwrap())).collect();
 
         assert_eq!(expected, actual);
     }

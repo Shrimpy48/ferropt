@@ -1,9 +1,8 @@
-use encoding_rs::WINDOWS_1252;
 use lazy_static::lazy_static;
 
 use crate::{
     evolve::{AnnotatedLayout, CharIdx, TypingEvent},
-    layout::{finger_for_pos, Finger, Hand, Layer, NUM_KEYS},
+    layout::{finger_for_pos, Finger, Hand, Layer, Win1252Char, NUM_KEYS},
 };
 
 #[rustfmt::skip]
@@ -62,7 +61,7 @@ fn vert_penalty(f: Finger) -> u8 {
 
 const OUTWARD_PENALTY: u8 = 1;
 
-fn next_key_cost(i: usize, j: usize) -> u8 {
+fn next_key_cost(i: u8, j: u8) -> u8 {
     let r0 = i / 10;
     let c0 = i % 10;
     let r1 = j / 10;
@@ -91,8 +90,7 @@ fn next_key_cost(i: usize, j: usize) -> u8 {
             Finger::Pinky => 18,
             Finger::Thumb => 10,
         };
-        let sq_dist =
-            vert_penalty(f0) as usize * row_dist * row_dist + horiz_penalty * col_dist * col_dist;
+        let sq_dist = vert_penalty(f0) * row_dist * row_dist + horiz_penalty * col_dist * col_dist;
         if sq_dist == 0 {
             strength_penalty
         } else {
@@ -129,7 +127,7 @@ fn next_key_cost(i: usize, j: usize) -> u8 {
             Hand::Right => c1 > c0,
         };
         let stretch = c0 == 4 || c0 == 5 || c1 == 4 || c1 == 5;
-        let dist = log_norm(row_dist * vert_penalty(f1) as usize);
+        let dist = log_norm(row_dist * vert_penalty(f1));
         (if outward { OUTWARD_PENALTY } else { 0 }) + (if stretch { 2 } else { 0 }) + dist
     } else {
         // Different hand.
@@ -137,17 +135,17 @@ fn next_key_cost(i: usize, j: usize) -> u8 {
     }
 }
 
-pub(crate) fn log_norm(x: usize) -> u8 {
+pub(crate) fn log_norm(x: u8) -> u8 {
     // To distinguish between 0 and 1;
     let x = x + 1;
     // Calculate the integer log2, rounded down.
-    let shift = usize::BITS - x.leading_zeros();
+    let shift = u8::BITS - x.leading_zeros();
     assert!(shift > 0);
     assert!(shift - 1 <= u8::MAX.into());
     (shift - 1) as u8
 }
 
-fn held_key_cost(i: usize, j: usize) -> u8 {
+fn held_key_cost(i: u8, j: u8) -> u8 {
     let r0 = i / 10;
     let c0 = i % 10;
     let r1 = j / 10;
@@ -202,7 +200,7 @@ fn held_key_cost(i: usize, j: usize) -> u8 {
             Hand::Right => c1 > c0,
         };
         let stretch = c0 == 4 || c0 == 5 || c1 == 4 || c1 == 5;
-        let dist = log_norm(row_dist * vert_penalty(f1) as usize);
+        let dist = log_norm(row_dist * vert_penalty(f1));
         (if outward { OUTWARD_PENALTY } else { 0 })
             + (if stretch { 2 } else { 0 })
             + dist
@@ -259,14 +257,9 @@ fn similarity_cost(_layout: &AnnotatedLayout) -> f64 {
 }
 
 lazy_static! {
-    static ref ORDERED_PAIRS: [[u8; 2]; 4] =
-        [["(", ")"], ["{", "}"], ["[", "]"], ["<", ">"],].map(|p| p.map(|s| {
-            let (out, _, had_errors) = WINDOWS_1252.encode(s);
-            assert!(!had_errors);
-            assert!(out.len() == 1);
-            out[0]
-        }));
-    static ref SIMILAR_PAIRS: [[u8; 2]; 17] = [
+    static ref ORDERED_PAIRS: [[Win1252Char; 2]; 4] =
+        [["(", ")"], ["{", "}"], ["[", "]"], ["<", ">"],].map(|p| p.map(|s| s.try_into().unwrap()));
+    static ref SIMILAR_PAIRS: [[Win1252Char; 2]; 17] = [
         ["+", "-"],
         ["*", "/"],
         ["+", "*"],
@@ -285,75 +278,30 @@ lazy_static! {
         ["'", "`"],
         [";", ":"],
     ]
-    .map(|p| p.map(|s| {
-        let (out, _, had_errors) = WINDOWS_1252.encode(s);
-        assert!(!had_errors);
-        assert!(out.len() == 1);
-        out[0]
-    }));
-    static ref SPACE: u8 = {
-        let (out, _, had_errors) = WINDOWS_1252.encode(" ");
-        assert!(!had_errors);
-        assert!(out.len() == 1);
-        out[0]
-    };
-    static ref LOWER_ALPHA: [u8; 26] = [
+    .map(|p| p.map(|s| s.try_into().unwrap()));
+    static ref SPACE: Win1252Char = " ".try_into().unwrap();
+    static ref LOWER_ALPHA: [Win1252Char; 26] = [
         "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r",
         "s", "t", "u", "v", "w", "x", "y", "z",
     ]
-    .map(|s| {
-        let (out, _, had_errors) = WINDOWS_1252.encode(s);
-        assert!(!had_errors);
-        assert!(out.len() == 1);
-        out[0]
-    });
-    static ref UPPER_ALPHA: [u8; 26] = [
+    .map(|s| s.try_into().unwrap());
+    static ref UPPER_ALPHA: [Win1252Char; 26] = [
         "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R",
         "S", "T", "U", "V", "W", "X", "Y", "Z",
     ]
-    .map(|s| {
-        let (out, _, had_errors) = WINDOWS_1252.encode(s);
-        assert!(!had_errors);
-        assert!(out.len() == 1);
-        out[0]
-    });
-    static ref NUMBERS: [u8; 10] = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"].map(|s| {
-        let (out, _, had_errors) = WINDOWS_1252.encode(s);
-        assert!(!had_errors);
-        assert!(out.len() == 1);
-        out[0]
-    });
-    static ref MATHS_SYMBOLS: [u8; 13] =
-        ["+", "-", "*", "/", "%", "=", "!", "@", "<", ">", "^", "&", "|",].map(|s| {
-            let (out, _, had_errors) = WINDOWS_1252.encode(s);
-            assert!(!had_errors);
-            assert!(out.len() == 1);
-            out[0]
-        });
-    static ref BRACKETS: [u8; 8] = ["(", ")", "{", "}", "[", "]", "<", ">"].map(|s| {
-        let (out, _, had_errors) = WINDOWS_1252.encode(s);
-        assert!(!had_errors);
-        assert!(out.len() == 1);
-        out[0]
-    });
-    static ref QUOTES: [u8; 3] = ["'", "\"", "`"].map(|s| {
-        let (out, _, had_errors) = WINDOWS_1252.encode(s);
-        assert!(!had_errors);
-        assert!(out.len() == 1);
-        out[0]
-    });
-    static ref PUNCTUATION: [u8; 9] = [",", ".", ";", ":", "!", "?", "\"", "'", "-"].map(|s| {
-        let (out, _, had_errors) = WINDOWS_1252.encode(s);
-        assert!(!had_errors);
-        assert!(out.len() == 1);
-        out[0]
-    });
-    static ref LINES: [u8; 6] = ["-", "_", "\\", "|", "/", "~"].map(|s| {
-        let (out, _, had_errors) = WINDOWS_1252.encode(s);
-        assert!(!had_errors);
-        assert!(out.len() == 1);
-        out[0]
-    });
+    .map(|s| s.try_into().unwrap());
+    static ref NUMBERS: [Win1252Char; 10] =
+        ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"].map(|s| s.try_into().unwrap());
+    static ref MATHS_SYMBOLS: [Win1252Char; 13] =
+        ["+", "-", "*", "/", "%", "=", "!", "@", "<", ">", "^", "&", "|",]
+            .map(|s| s.try_into().unwrap());
+    static ref BRACKETS: [Win1252Char; 8] =
+        ["(", ")", "{", "}", "[", "]", "<", ">"].map(|s| s.try_into().unwrap());
+    static ref QUOTES: [Win1252Char; 3] = ["'", "\"", "`"].map(|s| s.try_into().unwrap());
+    static ref PUNCTUATION: [Win1252Char; 9] =
+        [",", ".", ";", ":", "!", "?", "\"", "'", "-"].map(|s| s.try_into().unwrap());
+    static ref LINES: [Win1252Char; 6] =
+        ["-", "_", "\\", "|", "/", "~"].map(|s| s.try_into().unwrap());
 }
 
 // fn memorability_cost(_layout: &Layout, char_idx: &CharIdx) -> f64 {
@@ -487,7 +435,7 @@ fn relative_pos(r: usize, mut c: usize) -> (usize, usize) {
     (r, c)
 }
 
-static NUM_LAYOUTS: [[usize; 10]; 12] = [
+static NUM_LAYOUTS: [[u8; 10]; 12] = [
     [10, 11, 12, 13, 21, 22, 23, 1, 2, 3],
     [19, 16, 17, 18, 26, 27, 28, 6, 7, 8],
     [20, 21, 22, 23, 11, 12, 13, 1, 2, 3],
@@ -599,7 +547,7 @@ fn num_layout_penalty(layout: &AnnotatedLayout) -> f64 {
     // out
 }
 
-fn layer_variation(char_idx: &CharIdx, chars: impl IntoIterator<Item = u8>) -> f64 {
+fn layer_variation(char_idx: &CharIdx, chars: impl IntoIterator<Item = Win1252Char>) -> f64 {
     let layers: Vec<_> = chars
         .into_iter()
         .filter_map(|c| {

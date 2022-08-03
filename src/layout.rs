@@ -10,7 +10,57 @@ use std::str::FromStr;
 use lazy_static::lazy_static;
 use regex::Regex;
 
-pub const NUM_KEYS: usize = 34;
+pub const NUM_KEYS: u8 = 34;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Enum)]
+#[repr(transparent)]
+pub struct Win1252Char(u8);
+
+impl TryFrom<&'_ str> for Win1252Char {
+    type Error = ();
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        let (out, _, has_errors) = WINDOWS_1252.encode(value);
+        if has_errors || out.len() != 1 {
+            Err(())
+        } else {
+            Ok(Win1252Char(out[0]))
+        }
+    }
+}
+
+impl TryFrom<char> for Win1252Char {
+    type Error = ();
+
+    fn try_from(value: char) -> Result<Self, Self::Error> {
+        let buf = value.to_string();
+        let (out, _, has_errors) = WINDOWS_1252.encode(&buf);
+        if has_errors || out.len() != 1 {
+            Err(())
+        } else {
+            Ok(Win1252Char(out[0]))
+        }
+    }
+}
+
+impl From<Win1252Char> for char {
+    fn from(win_c: Win1252Char) -> Self {
+        let buf = [win_c.0];
+        let (out, _, has_errors) = WINDOWS_1252.decode(&buf);
+        assert!(!has_errors);
+        assert!(out.chars().count() == 1);
+        out.chars().next().unwrap()
+    }
+}
+
+impl ToString for Win1252Char {
+    fn to_string(&self) -> String {
+        let buf = [self.0];
+        let (out, _, has_errors) = WINDOWS_1252.decode(&buf);
+        assert!(!has_errors);
+        out.into()
+    }
+}
 
 lazy_static! {
     static ref KC_RE: Regex =
@@ -81,600 +131,110 @@ pub enum KeyCode {
 }
 
 lazy_static! {
-    static ref A: u8 = {
-        let (out, _, has_errors) = WINDOWS_1252.encode("a");
-        assert!(!has_errors);
-        assert!(out.len() == 1);
-        out[0]
-    };
-    static ref B: u8 = {
-        let (out, _, has_errors) = WINDOWS_1252.encode("b");
-        assert!(!has_errors);
-        assert!(out.len() == 1);
-        out[0]
-    };
-    static ref C: u8 = {
-        let (out, _, has_errors) = WINDOWS_1252.encode("c");
-        assert!(!has_errors);
-        assert!(out.len() == 1);
-        out[0]
-    };
-    static ref D: u8 = {
-        let (out, _, has_errors) = WINDOWS_1252.encode("d");
-        assert!(!has_errors);
-        assert!(out.len() == 1);
-        out[0]
-    };
-    static ref E: u8 = {
-        let (out, _, has_errors) = WINDOWS_1252.encode("e");
-        assert!(!has_errors);
-        assert!(out.len() == 1);
-        out[0]
-    };
-    static ref F: u8 = {
-        let (out, _, has_errors) = WINDOWS_1252.encode("f");
-        assert!(!has_errors);
-        assert!(out.len() == 1);
-        out[0]
-    };
-    static ref G: u8 = {
-        let (out, _, has_errors) = WINDOWS_1252.encode("g");
-        assert!(!has_errors);
-        assert!(out.len() == 1);
-        out[0]
-    };
-    static ref H: u8 = {
-        let (out, _, has_errors) = WINDOWS_1252.encode("h");
-        assert!(!has_errors);
-        assert!(out.len() == 1);
-        out[0]
-    };
-    static ref I: u8 = {
-        let (out, _, has_errors) = WINDOWS_1252.encode("i");
-        assert!(!has_errors);
-        assert!(out.len() == 1);
-        out[0]
-    };
-    static ref J: u8 = {
-        let (out, _, has_errors) = WINDOWS_1252.encode("j");
-        assert!(!has_errors);
-        assert!(out.len() == 1);
-        out[0]
-    };
-    static ref K: u8 = {
-        let (out, _, has_errors) = WINDOWS_1252.encode("k");
-        assert!(!has_errors);
-        assert!(out.len() == 1);
-        out[0]
-    };
-    static ref L: u8 = {
-        let (out, _, has_errors) = WINDOWS_1252.encode("l");
-        assert!(!has_errors);
-        assert!(out.len() == 1);
-        out[0]
-    };
-    static ref M: u8 = {
-        let (out, _, has_errors) = WINDOWS_1252.encode("m");
-        assert!(!has_errors);
-        assert!(out.len() == 1);
-        out[0]
-    };
-    static ref N: u8 = {
-        let (out, _, has_errors) = WINDOWS_1252.encode("n");
-        assert!(!has_errors);
-        assert!(out.len() == 1);
-        out[0]
-    };
-    static ref O: u8 = {
-        let (out, _, has_errors) = WINDOWS_1252.encode("o");
-        assert!(!has_errors);
-        assert!(out.len() == 1);
-        out[0]
-    };
-    static ref P: u8 = {
-        let (out, _, has_errors) = WINDOWS_1252.encode("p");
-        assert!(!has_errors);
-        assert!(out.len() == 1);
-        out[0]
-    };
-    static ref Q: u8 = {
-        let (out, _, has_errors) = WINDOWS_1252.encode("q");
-        assert!(!has_errors);
-        assert!(out.len() == 1);
-        out[0]
-    };
-    static ref R: u8 = {
-        let (out, _, has_errors) = WINDOWS_1252.encode("r");
-        assert!(!has_errors);
-        assert!(out.len() == 1);
-        out[0]
-    };
-    static ref S: u8 = {
-        let (out, _, has_errors) = WINDOWS_1252.encode("s");
-        assert!(!has_errors);
-        assert!(out.len() == 1);
-        out[0]
-    };
-    static ref T: u8 = {
-        let (out, _, has_errors) = WINDOWS_1252.encode("t");
-        assert!(!has_errors);
-        assert!(out.len() == 1);
-        out[0]
-    };
-    static ref U: u8 = {
-        let (out, _, has_errors) = WINDOWS_1252.encode("u");
-        assert!(!has_errors);
-        assert!(out.len() == 1);
-        out[0]
-    };
-    static ref V: u8 = {
-        let (out, _, has_errors) = WINDOWS_1252.encode("v");
-        assert!(!has_errors);
-        assert!(out.len() == 1);
-        out[0]
-    };
-    static ref W: u8 = {
-        let (out, _, has_errors) = WINDOWS_1252.encode("w");
-        assert!(!has_errors);
-        assert!(out.len() == 1);
-        out[0]
-    };
-    static ref X: u8 = {
-        let (out, _, has_errors) = WINDOWS_1252.encode("x");
-        assert!(!has_errors);
-        assert!(out.len() == 1);
-        out[0]
-    };
-    static ref Y: u8 = {
-        let (out, _, has_errors) = WINDOWS_1252.encode("y");
-        assert!(!has_errors);
-        assert!(out.len() == 1);
-        out[0]
-    };
-    static ref Z: u8 = {
-        let (out, _, has_errors) = WINDOWS_1252.encode("z");
-        assert!(!has_errors);
-        assert!(out.len() == 1);
-        out[0]
-    };
-    static ref DIGIT0: u8 = {
-        let (out, _, has_errors) = WINDOWS_1252.encode("0");
-        assert!(!has_errors);
-        assert!(out.len() == 1);
-        out[0]
-    };
-    static ref DIGIT1: u8 = {
-        let (out, _, has_errors) = WINDOWS_1252.encode("1");
-        assert!(!has_errors);
-        assert!(out.len() == 1);
-        out[0]
-    };
-    static ref DIGIT2: u8 = {
-        let (out, _, has_errors) = WINDOWS_1252.encode("2");
-        assert!(!has_errors);
-        assert!(out.len() == 1);
-        out[0]
-    };
-    static ref DIGIT3: u8 = {
-        let (out, _, has_errors) = WINDOWS_1252.encode("3");
-        assert!(!has_errors);
-        assert!(out.len() == 1);
-        out[0]
-    };
-    static ref DIGIT4: u8 = {
-        let (out, _, has_errors) = WINDOWS_1252.encode("4");
-        assert!(!has_errors);
-        assert!(out.len() == 1);
-        out[0]
-    };
-    static ref DIGIT5: u8 = {
-        let (out, _, has_errors) = WINDOWS_1252.encode("5");
-        assert!(!has_errors);
-        assert!(out.len() == 1);
-        out[0]
-    };
-    static ref DIGIT6: u8 = {
-        let (out, _, has_errors) = WINDOWS_1252.encode("6");
-        assert!(!has_errors);
-        assert!(out.len() == 1);
-        out[0]
-    };
-    static ref DIGIT7: u8 = {
-        let (out, _, has_errors) = WINDOWS_1252.encode("7");
-        assert!(!has_errors);
-        assert!(out.len() == 1);
-        out[0]
-    };
-    static ref DIGIT8: u8 = {
-        let (out, _, has_errors) = WINDOWS_1252.encode("8");
-        assert!(!has_errors);
-        assert!(out.len() == 1);
-        out[0]
-    };
-    static ref DIGIT9: u8 = {
-        let (out, _, has_errors) = WINDOWS_1252.encode("9");
-        assert!(!has_errors);
-        assert!(out.len() == 1);
-        out[0]
-    };
-    static ref COMMA: u8 = {
-        let (out, _, has_errors) = WINDOWS_1252.encode(",");
-        assert!(!has_errors);
-        assert!(out.len() == 1);
-        out[0]
-    };
-    static ref DOT: u8 = {
-        let (out, _, has_errors) = WINDOWS_1252.encode(".");
-        assert!(!has_errors);
-        assert!(out.len() == 1);
-        out[0]
-    };
-    static ref APOSTROPHE: u8 = {
-        let (out, _, has_errors) = WINDOWS_1252.encode("'");
-        assert!(!has_errors);
-        assert!(out.len() == 1);
-        out[0]
-    };
-    static ref SEMICOLON: u8 = {
-        let (out, _, has_errors) = WINDOWS_1252.encode(";");
-        assert!(!has_errors);
-        assert!(out.len() == 1);
-        out[0]
-    };
-    static ref BACKSLASH: u8 = {
-        let (out, _, has_errors) = WINDOWS_1252.encode("\\");
-        assert!(!has_errors);
-        assert!(out.len() == 1);
-        out[0]
-    };
-    static ref SLASH: u8 = {
-        let (out, _, has_errors) = WINDOWS_1252.encode("/");
-        assert!(!has_errors);
-        assert!(out.len() == 1);
-        out[0]
-    };
-    static ref LEFTSQUAREBRACKET: u8 = {
-        let (out, _, has_errors) = WINDOWS_1252.encode("[");
-        assert!(!has_errors);
-        assert!(out.len() == 1);
-        out[0]
-    };
-    static ref RIGHTSQUAREBRACKET: u8 = {
-        let (out, _, has_errors) = WINDOWS_1252.encode("]");
-        assert!(!has_errors);
-        assert!(out.len() == 1);
-        out[0]
-    };
-    static ref HASH: u8 = {
-        let (out, _, has_errors) = WINDOWS_1252.encode("#");
-        assert!(!has_errors);
-        assert!(out.len() == 1);
-        out[0]
-    };
-    static ref GRAVE: u8 = {
-        let (out, _, has_errors) = WINDOWS_1252.encode("`");
-        assert!(!has_errors);
-        assert!(out.len() == 1);
-        out[0]
-    };
-    static ref MINUS: u8 = {
-        let (out, _, has_errors) = WINDOWS_1252.encode("-");
-        assert!(!has_errors);
-        assert!(out.len() == 1);
-        out[0]
-    };
-    static ref EQUALS: u8 = {
-        let (out, _, has_errors) = WINDOWS_1252.encode("=");
-        assert!(!has_errors);
-        assert!(out.len() == 1);
-        out[0]
-    };
-    static ref SPACE: u8 = {
-        let (out, _, has_errors) = WINDOWS_1252.encode(" ");
-        assert!(!has_errors);
-        assert!(out.len() == 1);
-        out[0]
-    };
+    static ref A: Win1252Char = "a".try_into().unwrap();
+    static ref B: Win1252Char = "b".try_into().unwrap();
+    static ref C: Win1252Char = "c".try_into().unwrap();
+    static ref D: Win1252Char = "d".try_into().unwrap();
+    static ref E: Win1252Char = "e".try_into().unwrap();
+    static ref F: Win1252Char = "f".try_into().unwrap();
+    static ref G: Win1252Char = "g".try_into().unwrap();
+    static ref H: Win1252Char = "h".try_into().unwrap();
+    static ref I: Win1252Char = "i".try_into().unwrap();
+    static ref J: Win1252Char = "j".try_into().unwrap();
+    static ref K: Win1252Char = "k".try_into().unwrap();
+    static ref L: Win1252Char = "l".try_into().unwrap();
+    static ref M: Win1252Char = "m".try_into().unwrap();
+    static ref N: Win1252Char = "n".try_into().unwrap();
+    static ref O: Win1252Char = "o".try_into().unwrap();
+    static ref P: Win1252Char = "p".try_into().unwrap();
+    static ref Q: Win1252Char = "q".try_into().unwrap();
+    static ref R: Win1252Char = "r".try_into().unwrap();
+    static ref S: Win1252Char = "s".try_into().unwrap();
+    static ref T: Win1252Char = "t".try_into().unwrap();
+    static ref U: Win1252Char = "u".try_into().unwrap();
+    static ref V: Win1252Char = "v".try_into().unwrap();
+    static ref W: Win1252Char = "w".try_into().unwrap();
+    static ref X: Win1252Char = "x".try_into().unwrap();
+    static ref Y: Win1252Char = "y".try_into().unwrap();
+    static ref Z: Win1252Char = "z".try_into().unwrap();
+    static ref DIGIT0: Win1252Char = "0".try_into().unwrap();
+    static ref DIGIT1: Win1252Char = "1".try_into().unwrap();
+    static ref DIGIT2: Win1252Char = "2".try_into().unwrap();
+    static ref DIGIT3: Win1252Char = "3".try_into().unwrap();
+    static ref DIGIT4: Win1252Char = "4".try_into().unwrap();
+    static ref DIGIT5: Win1252Char = "5".try_into().unwrap();
+    static ref DIGIT6: Win1252Char = "6".try_into().unwrap();
+    static ref DIGIT7: Win1252Char = "7".try_into().unwrap();
+    static ref DIGIT8: Win1252Char = "8".try_into().unwrap();
+    static ref DIGIT9: Win1252Char = "9".try_into().unwrap();
+    static ref COMMA: Win1252Char = ",".try_into().unwrap();
+    static ref DOT: Win1252Char = ".".try_into().unwrap();
+    static ref APOSTROPHE: Win1252Char = "'".try_into().unwrap();
+    static ref SEMICOLON: Win1252Char = ";".try_into().unwrap();
+    static ref BACKSLASH: Win1252Char = "\\".try_into().unwrap();
+    static ref SLASH: Win1252Char = "/".try_into().unwrap();
+    static ref LEFTSQUAREBRACKET: Win1252Char = "[".try_into().unwrap();
+    static ref RIGHTSQUAREBRACKET: Win1252Char = "]".try_into().unwrap();
+    static ref HASH: Win1252Char = "#".try_into().unwrap();
+    static ref GRAVE: Win1252Char = "`".try_into().unwrap();
+    static ref MINUS: Win1252Char = "-".try_into().unwrap();
+    static ref EQUALS: Win1252Char = "=".try_into().unwrap();
+    static ref SPACE: Win1252Char = " ".try_into().unwrap();
 }
 lazy_static! {
-    static ref SHIFT_A: u8 = {
-        let (out, _, has_errors) = WINDOWS_1252.encode("A");
-        assert!(!has_errors);
-        assert!(out.len() == 1);
-        out[0]
-    };
-    static ref SHIFT_B: u8 = {
-        let (out, _, has_errors) = WINDOWS_1252.encode("B");
-        assert!(!has_errors);
-        assert!(out.len() == 1);
-        out[0]
-    };
-    static ref SHIFT_C: u8 = {
-        let (out, _, has_errors) = WINDOWS_1252.encode("C");
-        assert!(!has_errors);
-        assert!(out.len() == 1);
-        out[0]
-    };
-    static ref SHIFT_D: u8 = {
-        let (out, _, has_errors) = WINDOWS_1252.encode("D");
-        assert!(!has_errors);
-        assert!(out.len() == 1);
-        out[0]
-    };
-    static ref SHIFT_E: u8 = {
-        let (out, _, has_errors) = WINDOWS_1252.encode("E");
-        assert!(!has_errors);
-        assert!(out.len() == 1);
-        out[0]
-    };
-    static ref SHIFT_F: u8 = {
-        let (out, _, has_errors) = WINDOWS_1252.encode("F");
-        assert!(!has_errors);
-        assert!(out.len() == 1);
-        out[0]
-    };
-    static ref SHIFT_G: u8 = {
-        let (out, _, has_errors) = WINDOWS_1252.encode("G");
-        assert!(!has_errors);
-        assert!(out.len() == 1);
-        out[0]
-    };
-    static ref SHIFT_H: u8 = {
-        let (out, _, has_errors) = WINDOWS_1252.encode("H");
-        assert!(!has_errors);
-        assert!(out.len() == 1);
-        out[0]
-    };
-    static ref SHIFT_I: u8 = {
-        let (out, _, has_errors) = WINDOWS_1252.encode("I");
-        assert!(!has_errors);
-        assert!(out.len() == 1);
-        out[0]
-    };
-    static ref SHIFT_J: u8 = {
-        let (out, _, has_errors) = WINDOWS_1252.encode("J");
-        assert!(!has_errors);
-        assert!(out.len() == 1);
-        out[0]
-    };
-    static ref SHIFT_K: u8 = {
-        let (out, _, has_errors) = WINDOWS_1252.encode("K");
-        assert!(!has_errors);
-        assert!(out.len() == 1);
-        out[0]
-    };
-    static ref SHIFT_L: u8 = {
-        let (out, _, has_errors) = WINDOWS_1252.encode("L");
-        assert!(!has_errors);
-        assert!(out.len() == 1);
-        out[0]
-    };
-    static ref SHIFT_M: u8 = {
-        let (out, _, has_errors) = WINDOWS_1252.encode("M");
-        assert!(!has_errors);
-        assert!(out.len() == 1);
-        out[0]
-    };
-    static ref SHIFT_N: u8 = {
-        let (out, _, has_errors) = WINDOWS_1252.encode("N");
-        assert!(!has_errors);
-        assert!(out.len() == 1);
-        out[0]
-    };
-    static ref SHIFT_O: u8 = {
-        let (out, _, has_errors) = WINDOWS_1252.encode("O");
-        assert!(!has_errors);
-        assert!(out.len() == 1);
-        out[0]
-    };
-    static ref SHIFT_P: u8 = {
-        let (out, _, has_errors) = WINDOWS_1252.encode("P");
-        assert!(!has_errors);
-        assert!(out.len() == 1);
-        out[0]
-    };
-    static ref SHIFT_Q: u8 = {
-        let (out, _, has_errors) = WINDOWS_1252.encode("Q");
-        assert!(!has_errors);
-        assert!(out.len() == 1);
-        out[0]
-    };
-    static ref SHIFT_R: u8 = {
-        let (out, _, has_errors) = WINDOWS_1252.encode("R");
-        assert!(!has_errors);
-        assert!(out.len() == 1);
-        out[0]
-    };
-    static ref SHIFT_S: u8 = {
-        let (out, _, has_errors) = WINDOWS_1252.encode("S");
-        assert!(!has_errors);
-        assert!(out.len() == 1);
-        out[0]
-    };
-    static ref SHIFT_T: u8 = {
-        let (out, _, has_errors) = WINDOWS_1252.encode("T");
-        assert!(!has_errors);
-        assert!(out.len() == 1);
-        out[0]
-    };
-    static ref SHIFT_U: u8 = {
-        let (out, _, has_errors) = WINDOWS_1252.encode("U");
-        assert!(!has_errors);
-        assert!(out.len() == 1);
-        out[0]
-    };
-    static ref SHIFT_V: u8 = {
-        let (out, _, has_errors) = WINDOWS_1252.encode("V");
-        assert!(!has_errors);
-        assert!(out.len() == 1);
-        out[0]
-    };
-    static ref SHIFT_W: u8 = {
-        let (out, _, has_errors) = WINDOWS_1252.encode("W");
-        assert!(!has_errors);
-        assert!(out.len() == 1);
-        out[0]
-    };
-    static ref SHIFT_X: u8 = {
-        let (out, _, has_errors) = WINDOWS_1252.encode("X");
-        assert!(!has_errors);
-        assert!(out.len() == 1);
-        out[0]
-    };
-    static ref SHIFT_Y: u8 = {
-        let (out, _, has_errors) = WINDOWS_1252.encode("Y");
-        assert!(!has_errors);
-        assert!(out.len() == 1);
-        out[0]
-    };
-    static ref SHIFT_Z: u8 = {
-        let (out, _, has_errors) = WINDOWS_1252.encode("Z");
-        assert!(!has_errors);
-        assert!(out.len() == 1);
-        out[0]
-    };
-    static ref SHIFT_DIGIT0: u8 = {
-        let (out, _, has_errors) = WINDOWS_1252.encode(")");
-        assert!(!has_errors);
-        assert!(out.len() == 1);
-        out[0]
-    };
-    static ref SHIFT_DIGIT1: u8 = {
-        let (out, _, has_errors) = WINDOWS_1252.encode("!");
-        assert!(!has_errors);
-        assert!(out.len() == 1);
-        out[0]
-    };
-    static ref SHIFT_DIGIT2: u8 = {
-        let (out, _, has_errors) = WINDOWS_1252.encode("\"");
-        assert!(!has_errors);
-        assert!(out.len() == 1);
-        out[0]
-    };
-    static ref SHIFT_DIGIT3: u8 = {
-        let (out, _, has_errors) = WINDOWS_1252.encode("£");
-        assert!(!has_errors);
-        assert!(out.len() == 1);
-        out[0]
-    };
-    static ref SHIFT_DIGIT4: u8 = {
-        let (out, _, has_errors) = WINDOWS_1252.encode("$");
-        assert!(!has_errors);
-        assert!(out.len() == 1);
-        out[0]
-    };
-    static ref SHIFT_DIGIT5: u8 = {
-        let (out, _, has_errors) = WINDOWS_1252.encode("%");
-        assert!(!has_errors);
-        assert!(out.len() == 1);
-        out[0]
-    };
-    static ref SHIFT_DIGIT6: u8 = {
-        let (out, _, has_errors) = WINDOWS_1252.encode("^");
-        assert!(!has_errors);
-        assert!(out.len() == 1);
-        out[0]
-    };
-    static ref SHIFT_DIGIT7: u8 = {
-        let (out, _, has_errors) = WINDOWS_1252.encode("&");
-        assert!(!has_errors);
-        assert!(out.len() == 1);
-        out[0]
-    };
-    static ref SHIFT_DIGIT8: u8 = {
-        let (out, _, has_errors) = WINDOWS_1252.encode("*");
-        assert!(!has_errors);
-        assert!(out.len() == 1);
-        out[0]
-    };
-    static ref SHIFT_DIGIT9: u8 = {
-        let (out, _, has_errors) = WINDOWS_1252.encode("(");
-        assert!(!has_errors);
-        assert!(out.len() == 1);
-        out[0]
-    };
-    static ref SHIFT_COMMA: u8 = {
-        let (out, _, has_errors) = WINDOWS_1252.encode("<");
-        assert!(!has_errors);
-        assert!(out.len() == 1);
-        out[0]
-    };
-    static ref SHIFT_DOT: u8 = {
-        let (out, _, has_errors) = WINDOWS_1252.encode(">");
-        assert!(!has_errors);
-        assert!(out.len() == 1);
-        out[0]
-    };
-    static ref SHIFT_APOSTROPHE: u8 = {
-        let (out, _, has_errors) = WINDOWS_1252.encode("@");
-        assert!(!has_errors);
-        assert!(out.len() == 1);
-        out[0]
-    };
-    static ref SHIFT_SEMICOLON: u8 = {
-        let (out, _, has_errors) = WINDOWS_1252.encode(":");
-        assert!(!has_errors);
-        assert!(out.len() == 1);
-        out[0]
-    };
-    static ref SHIFT_BACKSLASH: u8 = {
-        let (out, _, has_errors) = WINDOWS_1252.encode("|");
-        assert!(!has_errors);
-        assert!(out.len() == 1);
-        out[0]
-    };
-    static ref SHIFT_SLASH: u8 = {
-        let (out, _, has_errors) = WINDOWS_1252.encode("?");
-        assert!(!has_errors);
-        assert!(out.len() == 1);
-        out[0]
-    };
-    static ref SHIFT_LEFTSQUAREBRACKET: u8 = {
-        let (out, _, has_errors) = WINDOWS_1252.encode("{");
-        assert!(!has_errors);
-        assert!(out.len() == 1);
-        out[0]
-    };
-    static ref SHIFT_RIGHTSQUAREBRACKET: u8 = {
-        let (out, _, has_errors) = WINDOWS_1252.encode("}");
-        assert!(!has_errors);
-        assert!(out.len() == 1);
-        out[0]
-    };
-    static ref SHIFT_HASH: u8 = {
-        let (out, _, has_errors) = WINDOWS_1252.encode("~");
-        assert!(!has_errors);
-        assert!(out.len() == 1);
-        out[0]
-    };
-    static ref SHIFT_GRAVE: u8 = {
-        let (out, _, has_errors) = WINDOWS_1252.encode("¬");
-        assert!(!has_errors);
-        assert!(out.len() == 1);
-        out[0]
-    };
-    static ref SHIFT_MINUS: u8 = {
-        let (out, _, has_errors) = WINDOWS_1252.encode("_");
-        assert!(!has_errors);
-        assert!(out.len() == 1);
-        out[0]
-    };
-    static ref SHIFT_EQUALS: u8 = {
-        let (out, _, has_errors) = WINDOWS_1252.encode("+");
-        assert!(!has_errors);
-        assert!(out.len() == 1);
-        out[0]
-    };
-    static ref SHIFT_SPACE: u8 = {
-        let (out, _, has_errors) = WINDOWS_1252.encode(" ");
-        assert!(!has_errors);
-        assert!(out.len() == 1);
-        out[0]
-    };
+    static ref SHIFT_A: Win1252Char = "A".try_into().unwrap();
+    static ref SHIFT_B: Win1252Char = "B".try_into().unwrap();
+    static ref SHIFT_C: Win1252Char = "C".try_into().unwrap();
+    static ref SHIFT_D: Win1252Char = "D".try_into().unwrap();
+    static ref SHIFT_E: Win1252Char = "E".try_into().unwrap();
+    static ref SHIFT_F: Win1252Char = "F".try_into().unwrap();
+    static ref SHIFT_G: Win1252Char = "G".try_into().unwrap();
+    static ref SHIFT_H: Win1252Char = "H".try_into().unwrap();
+    static ref SHIFT_I: Win1252Char = "I".try_into().unwrap();
+    static ref SHIFT_J: Win1252Char = "J".try_into().unwrap();
+    static ref SHIFT_K: Win1252Char = "K".try_into().unwrap();
+    static ref SHIFT_L: Win1252Char = "L".try_into().unwrap();
+    static ref SHIFT_M: Win1252Char = "M".try_into().unwrap();
+    static ref SHIFT_N: Win1252Char = "N".try_into().unwrap();
+    static ref SHIFT_O: Win1252Char = "O".try_into().unwrap();
+    static ref SHIFT_P: Win1252Char = "P".try_into().unwrap();
+    static ref SHIFT_Q: Win1252Char = "Q".try_into().unwrap();
+    static ref SHIFT_R: Win1252Char = "R".try_into().unwrap();
+    static ref SHIFT_S: Win1252Char = "S".try_into().unwrap();
+    static ref SHIFT_T: Win1252Char = "T".try_into().unwrap();
+    static ref SHIFT_U: Win1252Char = "U".try_into().unwrap();
+    static ref SHIFT_V: Win1252Char = "V".try_into().unwrap();
+    static ref SHIFT_W: Win1252Char = "W".try_into().unwrap();
+    static ref SHIFT_X: Win1252Char = "X".try_into().unwrap();
+    static ref SHIFT_Y: Win1252Char = "Y".try_into().unwrap();
+    static ref SHIFT_Z: Win1252Char = "Z".try_into().unwrap();
+    static ref SHIFT_DIGIT0: Win1252Char = ")".try_into().unwrap();
+    static ref SHIFT_DIGIT1: Win1252Char = "!".try_into().unwrap();
+    static ref SHIFT_DIGIT2: Win1252Char = "\"".try_into().unwrap();
+    static ref SHIFT_DIGIT3: Win1252Char = "£".try_into().unwrap();
+    static ref SHIFT_DIGIT4: Win1252Char = "$".try_into().unwrap();
+    static ref SHIFT_DIGIT5: Win1252Char = "%".try_into().unwrap();
+    static ref SHIFT_DIGIT6: Win1252Char = "^".try_into().unwrap();
+    static ref SHIFT_DIGIT7: Win1252Char = "&".try_into().unwrap();
+    static ref SHIFT_DIGIT8: Win1252Char = "*".try_into().unwrap();
+    static ref SHIFT_DIGIT9: Win1252Char = "(".try_into().unwrap();
+    static ref SHIFT_COMMA: Win1252Char = "<".try_into().unwrap();
+    static ref SHIFT_DOT: Win1252Char = ">".try_into().unwrap();
+    static ref SHIFT_APOSTROPHE: Win1252Char = "@".try_into().unwrap();
+    static ref SHIFT_SEMICOLON: Win1252Char = ":".try_into().unwrap();
+    static ref SHIFT_BACKSLASH: Win1252Char = "|".try_into().unwrap();
+    static ref SHIFT_SLASH: Win1252Char = "?".try_into().unwrap();
+    static ref SHIFT_LEFTSQUAREBRACKET: Win1252Char = "{".try_into().unwrap();
+    static ref SHIFT_RIGHTSQUAREBRACKET: Win1252Char = "}".try_into().unwrap();
+    static ref SHIFT_HASH: Win1252Char = "~".try_into().unwrap();
+    static ref SHIFT_GRAVE: Win1252Char = "¬".try_into().unwrap();
+    static ref SHIFT_MINUS: Win1252Char = "_".try_into().unwrap();
+    static ref SHIFT_EQUALS: Win1252Char = "+".try_into().unwrap();
+    static ref SHIFT_SPACE: Win1252Char = " ".try_into().unwrap();
 }
 
 impl KeyCode {
-    fn typed_char(self) -> u8 {
+    fn typed_char(self) -> Win1252Char {
         match self {
             Self::A => *A,
             Self::B => *B,
@@ -728,7 +288,7 @@ impl KeyCode {
         }
     }
 
-    fn shifted_char(self) -> u8 {
+    fn shifted_char(self) -> Win1252Char {
         match self {
             Self::A => *SHIFT_A,
             Self::B => *SHIFT_B,
@@ -909,7 +469,7 @@ pub enum Key {
 }
 
 impl Key {
-    pub fn typed_char(self, shifted: bool) -> Option<u8> {
+    pub fn typed_char(self, shifted: bool) -> Option<Win1252Char> {
         match self {
             Self::Typing(kc) => Some(if shifted {
                 kc.shifted_char()
@@ -1029,7 +589,7 @@ impl TryFrom<serde_json::Value> for Key {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[repr(transparent)]
-pub struct Layer<T>(pub(crate) [T; NUM_KEYS]);
+pub struct Layer<T>(pub(crate) [T; NUM_KEYS as usize]);
 
 impl<T> Layer<T> {
     pub(crate) fn iter(&self) -> impl Iterator<Item = &T> {
@@ -1054,7 +614,7 @@ impl<T: TryFrom<serde_json::Value, Error = ParseError>> TryFrom<serde_json::Valu
                 .collect::<Result<Vec<_>, _>>()
                 .and_then(|v| {
                     v.try_into().map_err(|v: Vec<_>| ParseError::WrongLength {
-                        expected: NUM_KEYS,
+                        expected: NUM_KEYS as usize,
                         found: v.len(),
                     })
                 })
@@ -1067,17 +627,17 @@ impl<T: TryFrom<serde_json::Value, Error = ParseError>> TryFrom<serde_json::Valu
     }
 }
 
-impl<T> Index<usize> for Layer<T> {
+impl<T> Index<u8> for Layer<T> {
     type Output = T;
 
-    fn index(&self, index: usize) -> &Self::Output {
-        &self.0[index]
+    fn index(&self, index: u8) -> &Self::Output {
+        &self.0[index as usize]
     }
 }
 
-impl<T> IndexMut<usize> for Layer<T> {
-    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
-        &mut self.0[index]
+impl<T> IndexMut<u8> for Layer<T> {
+    fn index_mut(&mut self, index: u8) -> &mut Self::Output {
+        &mut self.0[index as usize]
     }
 }
 
@@ -1162,17 +722,17 @@ impl TryFrom<serde_json::Value> for Layout {
     }
 }
 
-impl Index<usize> for Layout {
+impl Index<u8> for Layout {
     type Output = Layer<Key>;
 
-    fn index(&self, index: usize) -> &Self::Output {
-        &self.layers[index]
+    fn index(&self, index: u8) -> &Self::Output {
+        &self.layers[index as usize]
     }
 }
 
-impl IndexMut<usize> for Layout {
-    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
-        &mut self.layers[index]
+impl IndexMut<u8> for Layout {
+    fn index_mut(&mut self, index: u8) -> &mut Self::Output {
+        &mut self.layers[index as usize]
     }
 }
 
@@ -1228,7 +788,7 @@ impl Digit {
     }
 }
 
-pub fn finger_for_pos(row: usize, col: usize) -> Digit {
+pub fn finger_for_pos(row: u8, col: u8) -> Digit {
     if row == 3 {
         match col {
             0 | 1 => Digit::new(Hand::Left, Finger::Thumb),

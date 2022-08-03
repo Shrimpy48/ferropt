@@ -14,7 +14,7 @@ fn keys_bench(c: &mut Criterion) {
 
     let mut group = c.benchmark_group("keys");
 
-    for (path, string) in read_named_corpus().unwrap().into_iter().step_by(25) {
+    for (path, string) in read_named_corpus("corpus").unwrap().into_iter().step_by(25) {
         group.throughput(Throughput::Bytes(string.len() as u64));
         group.bench_with_input(
             BenchmarkId::from_parameter(path.display()),
@@ -31,11 +31,11 @@ fn oneshot_bench(c: &mut Criterion) {
     let ann_layout: AnnotatedLayout = layout.into();
 
     let mut group = c.benchmark_group("oneshot");
-    for (path, string) in read_named_corpus().unwrap().into_iter().step_by(25) {
+    for (path, string) in read_named_corpus("corpus").unwrap().into_iter().step_by(25) {
         let events: Vec<_> = keys(&ann_layout, string.iter().copied()).collect();
         group.throughput(Throughput::Elements(events.len() as u64));
         group.bench_with_input(
-            BenchmarkId::new("oneshot", path.display()),
+            BenchmarkId::from_parameter(path.display()),
             &events,
             |b, e| b.iter(|| oneshot(lookahead(e.iter().copied())).for_each(|_| {})),
         );
@@ -49,10 +49,10 @@ fn combined_bench(c: &mut Criterion) {
     let ann_layout: AnnotatedLayout = layout.into();
 
     let mut group = c.benchmark_group("combined");
-    for (path, string) in read_named_corpus().unwrap().into_iter().step_by(25) {
+    for (path, string) in read_named_corpus("corpus").unwrap().into_iter().step_by(25) {
         group.throughput(Throughput::Bytes(string.len() as u64));
         group.bench_with_input(
-            BenchmarkId::new("combined", path.display()),
+            BenchmarkId::from_parameter(path.display()),
             &string,
             |b, s| b.iter(|| oneshot(keys(&ann_layout, s.iter().copied())).for_each(|_| {})),
         );
