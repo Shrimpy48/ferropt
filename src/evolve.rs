@@ -1,8 +1,6 @@
 use encoding_rs::WINDOWS_1252;
 use enum_map::EnumMap;
 use rand::{thread_rng, Rng};
-use serde::__private::de::EnumDeserializer;
-use serde_json::Result;
 
 use std::collections::VecDeque;
 use std::iter::FusedIterator;
@@ -12,8 +10,6 @@ use std::{cmp, fs, io};
 use crate::cost::{cost_of_typing, layout_cost};
 
 use crate::layout::{Key, Layout, NUM_KEYS};
-
-const CORPUS_DIR: &str = "corpus";
 
 #[derive(Clone)]
 pub struct Keys<'l, I> {
@@ -635,15 +631,15 @@ fn read_named_corpus_impl<P: AsRef<Path>>(
     Ok(())
 }
 
-pub fn read_corpus() -> io::Result<Vec<Vec<u8>>> {
+pub fn read_corpus<P: AsRef<Path>>(path: P) -> io::Result<Vec<Vec<u8>>> {
     let mut out = Vec::new();
-    read_corpus_impl(&mut out, CORPUS_DIR)?;
+    read_corpus_impl(&mut out, path)?;
     Ok(out)
 }
 
-pub fn read_named_corpus() -> io::Result<Vec<(PathBuf, Vec<u8>)>> {
+pub fn read_named_corpus<P: AsRef<Path>>(path: P) -> io::Result<Vec<(PathBuf, Vec<u8>)>> {
     let mut out = Vec::new();
-    read_named_corpus_impl(&mut out, CORPUS_DIR)?;
+    read_named_corpus_impl(&mut out, path)?;
     Ok(out)
 }
 
