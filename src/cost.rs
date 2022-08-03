@@ -3,7 +3,7 @@ use lazy_static::lazy_static;
 
 use crate::{
     evolve::{AnnotatedLayout, CharIdx, TypingEvent},
-    layout::{finger_for_pos, Digit, Finger, Hand, Layer, NUM_KEYS},
+    layout::{finger_for_pos, Finger, Hand, Layer, NUM_KEYS},
 };
 
 #[rustfmt::skip]
@@ -68,15 +68,13 @@ fn next_key_cost(i: usize, j: usize) -> u8 {
     let r1 = j / 10;
     let c1 = j % 10;
     let row_dist = if r0 <= r1 { r1 - r0 } else { r0 - r1 };
-    let Digit {
-        hand: h0,
-        finger: f0,
-    } = finger_for_pos(r0, c0);
-    let Digit {
-        hand: h1,
-        finger: f1,
-    } = finger_for_pos(r1, c1);
-    if (h0, f0) == (h1, f1) {
+    let d0 = finger_for_pos(r0, c0);
+    let h0 = d0.hand();
+    let f0 = d0.finger();
+    let d1 = finger_for_pos(r1, c1);
+    let h1 = d1.hand();
+    let f1 = d1.finger();
+    if d0 == d1 {
         // Same finger.
         let col_dist = if c0 <= c1 { c1 - c0 } else { c0 - c1 };
         let horiz_penalty = match f0 {
@@ -155,14 +153,12 @@ fn held_key_cost(i: usize, j: usize) -> u8 {
     let r1 = j / 10;
     let c1 = j % 10;
     let row_dist = if r0 <= r1 { r1 - r0 } else { r0 - r1 };
-    let Digit {
-        hand: h0,
-        finger: f0,
-    } = finger_for_pos(r0, c0);
-    let Digit {
-        hand: h1,
-        finger: f1,
-    } = finger_for_pos(r1, c1);
+    let d0 = finger_for_pos(r0, c0);
+    let h0 = d0.hand();
+    let f0 = d0.finger();
+    let d1 = finger_for_pos(r1, c1);
+    let h1 = d1.hand();
+    let f1 = d1.finger();
     let strength_penalty = match f0 {
         Finger::Index => 6,
         Finger::Middle => 6,
@@ -170,7 +166,7 @@ fn held_key_cost(i: usize, j: usize) -> u8 {
         Finger::Pinky => 10,
         Finger::Thumb => 6,
     };
-    if (h0, f0) == (h1, f1) {
+    if d0 == d1 {
         // Same finger.
         100
     } else if h0 == h1 {

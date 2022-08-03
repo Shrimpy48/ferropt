@@ -1177,6 +1177,7 @@ impl IndexMut<usize> for Layout {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Enum)]
+#[repr(u8)]
 pub enum Finger {
     Pinky,
     Ring,
@@ -1186,64 +1187,64 @@ pub enum Finger {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Enum)]
+#[repr(u8)]
 pub enum Hand {
     Left,
-    Right,
+    Right = 0b10000000,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Enum)]
-pub struct Digit {
-    pub hand: Hand,
-    pub finger: Finger,
+#[repr(u8)]
+pub enum Digit {
+    LeftPinky,
+    LeftRing,
+    LeftMiddle,
+    LeftIndex,
+    LeftThumb,
+    RightPinky = 0b10000000,
+    RightRing,
+    RightMiddle,
+    RightIndex,
+    RightThumb,
+}
+
+impl Digit {
+    pub fn hand(self) -> Hand {
+        // SAFETY: Digit is simply Hand | Finger,
+        // whose valid bit patterns do not overlap.
+        unsafe { std::mem::transmute(self as u8 & 0b10000000) }
+    }
+
+    pub fn finger(self) -> Finger {
+        // SAFETY: Digit is simply Hand | Finger,
+        // whose valid bit patterns do not overlap.
+        unsafe { std::mem::transmute(self as u8 & 0b01111111) }
+    }
+
+    pub fn new(hand: Hand, finger: Finger) -> Self {
+        // SAFETY: Digit is simply Hand | Finger,
+        // whose valid bit patterns do not overlap.
+        unsafe { std::mem::transmute(hand as u8 | finger as u8) }
+    }
 }
 
 pub fn finger_for_pos(row: usize, col: usize) -> Digit {
     if row == 3 {
         match col {
-            0 | 1 => Digit {
-                hand: Hand::Left,
-                finger: Finger::Thumb,
-            },
-            2 | 3 => Digit {
-                hand: Hand::Right,
-                finger: Finger::Thumb,
-            },
+            0 | 1 => Digit::new(Hand::Left, Finger::Thumb),
+            2 | 3 => Digit::new(Hand::Right, Finger::Thumb),
             _ => panic!("invalid column {} for row {}", col, row),
         }
     } else {
         match col {
-            0 => Digit {
-                hand: Hand::Left,
-                finger: Finger::Pinky,
-            },
-            1 => Digit {
-                hand: Hand::Left,
-                finger: Finger::Ring,
-            },
-            2 => Digit {
-                hand: Hand::Left,
-                finger: Finger::Middle,
-            },
-            3 | 4 => Digit {
-                hand: Hand::Left,
-                finger: Finger::Index,
-            },
-            5 | 6 => Digit {
-                hand: Hand::Right,
-                finger: Finger::Index,
-            },
-            7 => Digit {
-                hand: Hand::Right,
-                finger: Finger::Middle,
-            },
-            8 => Digit {
-                hand: Hand::Right,
-                finger: Finger::Ring,
-            },
-            9 => Digit {
-                hand: Hand::Right,
-                finger: Finger::Pinky,
-            },
+            0 => Digit::new(Hand::Left, Finger::Pinky),
+            1 => Digit::new(Hand::Left, Finger::Ring),
+            2 => Digit::new(Hand::Left, Finger::Middle),
+            3 | 4 => Digit::new(Hand::Left, Finger::Index),
+            5 | 6 => Digit::new(Hand::Right, Finger::Index),
+            7 => Digit::new(Hand::Right, Finger::Middle),
+            8 => Digit::new(Hand::Right, Finger::Ring),
+            9 => Digit::new(Hand::Right, Finger::Pinky),
             _ => panic!("invalid column {} for row {}", col, row),
         }
     }

@@ -5,7 +5,7 @@ use std::num::NonZeroU64;
 use crate::{
     cost::log_norm,
     evolve::{AnnotatedLayout, TypingEvent},
-    layout::{finger_for_pos, Digit, Finger, Hand},
+    layout::{finger_for_pos, Digit},
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -16,85 +16,53 @@ struct LastUsedEntry {
 }
 
 pub fn cost_of_typing(keys: impl Iterator<Item = TypingEvent>) -> (u64, u64) {
-    use Finger::*;
-    use Hand::*;
     let mut last_used = enum_map! {
-        Digit {
-            hand: Left,
-            finger: Pinky,
-        } => LastUsedEntry {
+        Digit::LeftPinky => LastUsedEntry {
             at: None,
             row: 1,
             col: 0,
         },
-        Digit {
-            hand: Left,
-            finger: Ring,
-        } => LastUsedEntry {
+        Digit::LeftRing => LastUsedEntry {
             at: None,
             row: 1,
             col: 1,
         },
-        Digit {
-            hand: Left,
-            finger: Middle,
-        } => LastUsedEntry {
+        Digit::LeftMiddle => LastUsedEntry {
             at: None,
             row: 1,
             col: 2,
         },
-        Digit {
-            hand: Left,
-            finger: Index,
-        } => LastUsedEntry {
+        Digit::LeftIndex => LastUsedEntry {
             at: None,
             row: 1,
             col: 3,
         },
-        Digit {
-            hand: Right,
-            finger: Index,
-        } => LastUsedEntry {
+        Digit::RightIndex => LastUsedEntry {
             at: None,
             row: 1,
             col: 6,
         },
-        Digit {
-            hand: Right,
-            finger: Middle,
-        } => LastUsedEntry {
+        Digit::RightMiddle => LastUsedEntry {
             at: None,
             row: 1,
             col: 7,
         },
-        Digit {
-            hand: Right,
-            finger: Ring,
-        } => LastUsedEntry {
+        Digit::RightRing => LastUsedEntry {
             at: None,
             row: 1,
             col: 8,
         },
-        Digit {
-            hand: Right,
-            finger: Pinky,
-        } => LastUsedEntry {
+        Digit::RightPinky => LastUsedEntry {
             at: None,
             row: 1,
             col: 9,
         },
-        Digit {
-            hand: Left,
-            finger: Thumb,
-        } => LastUsedEntry {
+        Digit::LeftThumb => LastUsedEntry {
             at: None,
             row: 3,
             col: 1,
         },
-        Digit {
-            hand: Right,
-            finger: Thumb,
-        } => LastUsedEntry {
+        Digit::RightThumb => LastUsedEntry {
             at: None,
             row: 3,
             col: 2,
