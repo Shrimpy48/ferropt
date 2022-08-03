@@ -16,7 +16,7 @@ struct Args {
     quiet: bool,
     #[clap(short = 'n', long, value_parser, default_value_t = 10_000)]
     iterations: u32,
-    #[clap(short, long, value_parser, default_value_t = 14)]
+    #[clap(short, long, value_parser, default_value_t = 5)]
     trials: u32,
     #[clap(short, long, value_parser, default_value = "corpus")]
     corpus: PathBuf,
@@ -110,7 +110,7 @@ fn run_trials(args: &Args, corpus: &[Vec<u8>], layout: &Layout) -> (Layout, f64)
 
     if !args.quiet {
         eprintln!(
-            "layout MD = {:6.2}, μ = {:6.3}, σ = {:5.3}, best = {:6.3} in {}",
+            "layout MD = {:6.2}, mean = {:6.3}, std dev = {:5.3}, best = {:6.3} in {}",
             mad,
             mean,
             std_dev,

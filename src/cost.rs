@@ -470,7 +470,6 @@ fn memorability_cost(layout: &AnnotatedLayout) -> f64 {
         + 0.002 * similar_pair_penalty
         + 0.01 * layer_variation(layout.char_idx(), *LOWER_ALPHA)
         + 0.01 * layer_variation(layout.char_idx(), *UPPER_ALPHA)
-        + 0.01 * layer_variation(layout.char_idx(), *NUMBERS)
         + 0.002 * layer_variation(layout.char_idx(), *MATHS_SYMBOLS)
         + 0.002 * layer_variation(layout.char_idx(), *BRACKETS)
         + 0.002 * layer_variation(layout.char_idx(), *QUOTES)
@@ -479,6 +478,129 @@ fn memorability_cost(layout: &AnnotatedLayout) -> f64 {
         + 0.1 * space_penalty
         + 0.1 * shift_penalty
         + 0.1 * layer_penalty
+        + num_layout_penalty(layout)
+}
+
+fn relative_pos(r: usize, mut c: usize) -> (usize, usize) {
+    if r == 3 {
+        c += 3;
+    }
+    if c >= 5 {
+        c += 1;
+    }
+    (r, c)
+}
+
+static NUM_LAYOUTS: [[usize; 10]; 12] = [
+    [10, 11, 12, 13, 21, 22, 23, 1, 2, 3],
+    [19, 16, 17, 18, 26, 27, 28, 6, 7, 8],
+    [20, 21, 22, 23, 11, 12, 13, 1, 2, 3],
+    [29, 26, 27, 28, 16, 17, 18, 6, 7, 8],
+    [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+    [10, 11, 12, 13, 14, 15, 16, 17, 18, 19],
+    [20, 21, 22, 23, 24, 25, 26, 27, 28, 29],
+    [10, 11, 12, 13, 23, 26, 16, 17, 18, 19],
+    [0, 1, 2, 3, 4, 10, 11, 12, 13, 14],
+    [10, 11, 12, 13, 14, 20, 21, 22, 23, 24],
+    [5, 6, 7, 8, 9, 15, 16, 17, 18, 19],
+    [15, 16, 17, 18, 19, 25, 26, 27, 28, 29],
+];
+
+fn hamming_dist<T: PartialEq>(xs: &[T], ys: &[T]) -> usize {
+    xs.iter().zip(ys).filter(|(x, y)| x != y).count()
+}
+
+fn num_layout_penalty(layout: &AnnotatedLayout) -> f64 {
+    if layer_variation(layout.char_idx(), *NUMBERS) != 0. {
+        return layer_variation(layout.char_idx(), *NUMBERS) * 10.;
+    }
+    let positions: Vec<_> = NUMBERS
+        .into_iter()
+        .filter_map(|c| Some(layout.char_idx()[c]?.pos))
+        .collect();
+    if positions.len() != 10 {
+        return 0.;
+    }
+    NUM_LAYOUTS
+        .iter()
+        .map(|l| hamming_dist(l, &positions))
+        .min()
+        .unwrap() as f64
+    // let rl = positions.iter().copied().map(|(r, _)| r).min().unwrap();
+    // let cl = positions.iter().copied().map(|(_, c)| c).min().unwrap();
+    // let rh = positions.iter().copied().map(|(r, _)| r).max().unwrap();
+    // let ch = positions.iter().copied().map(|(_, c)| c).max().unwrap();
+    // let mut out = 0.;
+    // let w = 1 + ch - cl;
+    // let h = 1 + rh - rl;
+    // match (w, h) {
+    //     (4, 3) => {
+    //         // A numpad-style layout.
+    //         let cl19 = positions[1..]
+    //             .iter()
+    //             .copied()
+    //             .map(|(_, c)| c)
+    //             .min()
+    //             .unwrap();
+    //         out += positions[1].1.abs_diff(cl19) as f64;
+    //         for w in positions[1..].windows(2) {
+    //             if let [a, b] = w {
+    //                 if b.0 == a.0 {
+    //                     out += 0.1 * (a.1 + 1).abs_diff(b.1) as f64;
+    //                 } else {
+    //                     out += b.1.abs_diff(cl19) as f64;
+    //                 }
+    //             } else {
+    //                 unreachable!();
+    //             }
+    //         }
+    //     }
+    //     (5, 2) => {
+    //         // A block layout.
+    //         out += positions[0].1.abs_diff(cl) as f64;
+    //         for w in positions.windows(2) {
+    //             if let [a, b] = w {
+    //                 if b.0 == a.0 {
+    //                     out += 0.1 * (a.1 + 1).abs_diff(b.1) as f64;
+    //                 } else {
+    //                     out += b.1.abs_diff(cl) as f64;
+    //                 }
+    //             } else {
+    //                 unreachable!();
+    //             }
+    //         }
+    //     }
+    //     (11, 1) => {
+    //         // A single row.
+    //         out += positions[0].1.abs_diff(cl) as f64;
+    //         for w in positions.windows(2) {
+    //             if let [a, b] = w {
+    //                 if b.0 == a.0 {
+    //                     out += 0.1 * (a.1 + 1).abs_diff(b.1) as f64;
+    //                 } else {
+    //                     out += b.1.abs_diff(cl) as f64;
+    //                 }
+    //             } else {
+    //                 unreachable!();
+    //             }
+    //         }
+    //     }
+    //     _ => {
+    //         out += 2. * ((w * h - 10) as f64).sqrt();
+    //         for w in positions.windows(2) {
+    //             if let [a, b] = w {
+    //                 if b.0 == a.0 {
+    //                     out += 0.1 * (a.1 + 1).abs_diff(b.1) as f64;
+    //                 } else {
+    //                     out += 0.05;
+    //                 }
+    //             } else {
+    //                 unreachable!();
+    //             }
+    //         }
+    //     }
+    // }
+    // out
 }
 
 fn layer_variation(char_idx: &CharIdx, chars: impl IntoIterator<Item = u8>) -> f64 {

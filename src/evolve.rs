@@ -7,7 +7,8 @@ use std::iter::FusedIterator;
 use std::path::{Path, PathBuf};
 use std::{cmp, fs, io};
 
-use crate::cost::{cost_of_typing, layout_cost};
+use crate::cost::cost_of_typing;
+use crate::cost::layout_cost;
 
 use crate::layout::{Key, Layout, NUM_KEYS};
 
@@ -463,7 +464,7 @@ pub fn string_cost(layout: &AnnotatedLayout, string: &[u8]) -> (u64, u64) {
     // let keys = keys(&layout.char_idx, string.chars());
     // let events = key_seq(layout.layer_idx, layout.shift_idx, keys);
 
-    let events = oneshot(lookahead(keys(layout, string.iter().copied())));
+    let events = oneshot(keys(layout, string.iter().copied()));
 
     cost_of_typing(events)
 }
@@ -1044,7 +1045,7 @@ mod tests {
             ]
         };
 
-        let actual: Vec<_> = oneshot(lookahead(keys(&layout.into(), string.bytes()))).collect();
+        let actual: Vec<_> = oneshot(keys(&layout.into(), string.bytes())).collect();
 
         assert_eq!(expected, actual);
     }
