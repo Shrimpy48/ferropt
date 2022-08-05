@@ -1,4 +1,5 @@
-use ferropt::evolve::*;
+use ferropt::anneal::*;
+use ferropt::cost::heuristic::Model;
 use ferropt::layout::*;
 
 use clap::Parser;
@@ -50,9 +51,11 @@ fn main() -> io::Result<()> {
 fn run_trials(args: &Args, corpus: &[Vec<Win1252Char>], layout: &Layout) -> (Layout, f64) {
     let start = Instant::now();
 
+    let cost_model = Model::default();
+
     let results: Vec<_> = if args.quiet {
         iter::repeatn(layout, args.trials as usize)
-            .map(|l| optimise(args.iterations, l.clone(), corpus, |_i| {}))
+            .map(|l| optimise(&cost_model, args.iterations, l.clone(), corpus, |_i| {}))
             .collect()
     } else {
         let multiprog = MultiProgress::new();
@@ -73,7 +76,7 @@ fn run_trials(args: &Args, corpus: &[Vec<Win1252Char>], layout: &Layout) -> (Lay
                 iter::repeatn(layout, args.trials as usize)
                     .zip(bars)
                     .map(|(l, bar)| {
-                        let res = optimise(args.iterations, l.clone(), corpus, |i| {
+                        let res = optimise(&cost_model, args.iterations, l.clone(), corpus, |i| {
                             bar.set_position(i.into())
                         });
                         bar.finish();

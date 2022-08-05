@@ -1,9 +1,64 @@
 use lazy_static::lazy_static;
 
-use crate::{
-    evolve::{AnnotatedLayout, CharIdx, TypingEvent},
-    layout::{finger_for_pos, Finger, Hand, Layer, Win1252Char, NUM_KEYS},
+use crate::layout::{
+    finger_for_pos, AnnotatedLayout, CharIdx, Finger, Hand, Layer, TypingEvent, Win1252Char,
+    NUM_KEYS,
 };
+
+use super::{log_norm, CostModel};
+
+pub struct Model;
+
+impl Default for Model {
+    fn default() -> Self {
+        Self
+    }
+}
+
+impl CostModel for Model {
+    fn cost_of_typing(&self, keys: impl Iterator<Item = TypingEvent>) -> (u64, u64) {
+        let mut held_keys = Vec::new();
+        let mut prev_key = None;
+        let mut total_cost = 0;
+        let mut count = 0;
+        for event in keys {
+            match event {
+                TypingEvent::Tap { pos, for_char } => {
+                    total_cost += KEY_COST[pos] as u64;
+                    for held in held_keys.iter() {
+                        total_cost += HELD_KEY_COST[*held][pos] as u64;
+                    }
+                    if let Some(prev) = prev_key {
+                        total_cost += NEXT_KEY_COST[prev][pos] as u64;
+                    }
+                    if for_char {
+                        count += 1;
+                    }
+                    prev_key = Some(pos);
+                }
+                TypingEvent::Hold(pos) => {
+                    held_keys.push(pos);
+                    prev_key = None;
+                }
+                TypingEvent::Release(pos) => {
+                    let idx = held_keys
+                        .iter()
+                        .enumerate()
+                        .find_map(|(i, k)| (*k == pos).then_some(i))
+                        .unwrap();
+                    held_keys.swap_remove(idx);
+                }
+                TypingEvent::Unknown => {
+                    prev_key = None;
+                }
+            }
+        }
+        (total_cost, count)
+    }
+    fn layout_cost(&self, layout: &AnnotatedLayout) -> f64 {
+        similarity_cost(layout) + memorability_cost(layout)
+    }
+}
 
 #[rustfmt::skip]
 const KEY_COST: KeyCost = Layer([
@@ -135,16 +190,6 @@ fn next_key_cost(i: u8, j: u8) -> u8 {
     }
 }
 
-pub(crate) fn log_norm(x: u8) -> u8 {
-    // To distinguish between 0 and 1;
-    let x = x + 1;
-    // Calculate the integer log2, rounded down.
-    let shift = u8::BITS - x.leading_zeros();
-    assert!(shift > 0);
-    assert!(shift - 1 <= u8::MAX.into());
-    (shift - 1) as u8
-}
-
 fn held_key_cost(i: u8, j: u8) -> u8 {
     let r0 = i / 10;
     let c0 = i % 10;
@@ -209,46 +254,6 @@ fn held_key_cost(i: u8, j: u8) -> u8 {
         // Different hand.
         strength_penalty
     }
-}
-
-pub fn cost_of_typing(keys: impl Iterator<Item = TypingEvent>) -> (u64, u64) {
-    let mut held_keys = Vec::new();
-    let mut prev_key = None;
-    let mut total_cost = 0;
-    let mut count = 0;
-    for event in keys {
-        match event {
-            TypingEvent::Tap { pos, for_char } => {
-                total_cost += KEY_COST[pos] as u64;
-                for held in held_keys.iter() {
-                    total_cost += HELD_KEY_COST[*held][pos] as u64;
-                }
-                if let Some(prev) = prev_key {
-                    total_cost += NEXT_KEY_COST[prev][pos] as u64;
-                }
-                if for_char {
-                    count += 1;
-                }
-                prev_key = Some(pos);
-            }
-            TypingEvent::Hold(pos) => {
-                held_keys.push(pos);
-                prev_key = None;
-            }
-            TypingEvent::Release(pos) => {
-                let idx = held_keys
-                    .iter()
-                    .enumerate()
-                    .find_map(|(i, k)| (*k == pos).then_some(i))
-                    .unwrap();
-                held_keys.swap_remove(idx);
-            }
-            TypingEvent::Unknown => {
-                prev_key = None;
-            }
-        }
-    }
-    (total_cost, count)
 }
 
 fn similarity_cost(_layout: &AnnotatedLayout) -> f64 {
@@ -563,10 +568,6 @@ fn layer_variation(char_idx: &CharIdx, chars: impl IntoIterator<Item = Win1252Ch
         num_different += layers[i + 1..].iter().filter(|&&b| b != a).count();
     }
     num_different as f64 / layers.len() as f64
-}
-
-pub fn layout_cost(layout: &AnnotatedLayout) -> f64 {
-    similarity_cost(layout) + memorability_cost(layout)
 }
 
 #[cfg(test)]

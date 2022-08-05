@@ -2,10 +2,7 @@ use std::fs::File;
 
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 
-use ferropt::{
-    evolve::{keys, lookahead, oneshot, read_named_corpus, AnnotatedLayout},
-    layout::Layout,
-};
+use ferropt::layout::{keys, lookahead, oneshot, read_named_corpus, AnnotatedLayout, Layout};
 
 fn keys_bench(c: &mut Criterion) {
     let f = File::open("initial_rnum.json").unwrap();
