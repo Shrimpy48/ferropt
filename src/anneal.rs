@@ -1,10 +1,15 @@
+use lazy_static::lazy_static;
 use rand::{thread_rng, Rng};
 
 use std::cmp;
 
 use crate::cost::CostModel;
-
 use crate::layout::{AnnotatedLayout, Key, Layout, Win1252Char, NUM_KEYS};
+
+lazy_static! {
+    /// Keys which the optimiser may not move.
+    static ref PINNED_KEYS: Vec<(u8, u8)> = vec![(0, 31)];
+}
 
 #[derive(Debug, Clone, Copy)]
 enum Mutation {
@@ -24,32 +29,44 @@ enum Mutation {
 
 impl Mutation {
     fn gen<R: Rng>(mut rng: R, layout: &AnnotatedLayout) -> Self {
-        let layer = rng.gen_range(0..layout.num_layers());
-        let i = rng.gen_range(0..NUM_KEYS);
-        if matches!(layout.layout()[layer][i], Key::Layer(_) | Key::Shift) {
-            assert_eq!(layer, 0);
+        let (layer_a, pos_a) = loop {
+            let layer = rng.gen_range(0..layout.num_layers());
+            let pos = rng.gen_range(0..NUM_KEYS);
+            if !PINNED_KEYS.contains(&(layer, pos)) {
+                break (layer, pos);
+            }
+        };
+        if matches!(layout.layout()[layer_a][pos_a], Key::Layer(_) | Key::Shift) {
+            assert_eq!(layer_a, 0);
             // Keep layer switch keys on home layer
             // to ensure every layer can be accessed.
-            let j = rng.gen_range(0..NUM_KEYS);
-            Self::SwapKeys {
-                layer_a: 0,
-                layer_b: 0,
-                pos_a: i,
-                pos_b: j,
-            }
-        } else {
-            let layer2 = rng.gen_range(0..layout.num_layers());
-            let j = loop {
-                let j = rng.gen_range(0..NUM_KEYS);
-                if !matches!(layout.layout()[layer2][j], Key::Layer(_) | Key::Shift) {
-                    break j;
+            let pos_b = loop {
+                let pos = rng.gen_range(0..NUM_KEYS);
+                if !PINNED_KEYS.contains(&(0, pos)) {
+                    break pos;
                 }
             };
             Self::SwapKeys {
-                layer_a: layer,
-                layer_b: layer2,
-                pos_a: i,
-                pos_b: j,
+                layer_a: 0,
+                layer_b: 0,
+                pos_a,
+                pos_b,
+            }
+        } else {
+            let (layer_b, pos_b) = loop {
+                let layer = rng.gen_range(0..layout.num_layers());
+                let pos = rng.gen_range(0..NUM_KEYS);
+                if !PINNED_KEYS.contains(&(layer, pos))
+                    && !matches!(layout.layout()[layer][pos], Key::Layer(_) | Key::Shift)
+                {
+                    break (layer, pos);
+                }
+            };
+            Self::SwapKeys {
+                layer_a,
+                layer_b,
+                pos_a,
+                pos_b,
             }
         }
     }
