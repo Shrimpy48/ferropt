@@ -4,11 +4,15 @@ use rand::{thread_rng, Rng};
 use std::cmp;
 
 use crate::cost::CostModel;
-use crate::layout::{AnnotatedLayout, Key, Layout, Win1252Char, NUM_KEYS};
+use crate::layout::{AnnotatedLayout, Key, Layout, Win1252Char, NUMBERS, NUM_KEYS, NUM_LAYOUTS};
 
 lazy_static! {
     /// Keys which the optimiser may not move.
     static ref PINNED_KEYS: Vec<(u8, u8)> = vec![(0, 31)];
+}
+
+fn pinned(layer: u8, pos: u8) -> bool {
+    PINNED_KEYS.contains(&(layer, pos))
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -18,6 +22,10 @@ enum Mutation {
         layer_b: u8,
         pos_a: u8,
         pos_b: u8,
+    },
+    SwapNumLayout {
+        layout_a: u8,
+        layout_b: u8,
     },
     // SwapPaired {
     //     l0: u8,
@@ -32,17 +40,31 @@ impl Mutation {
         let (layer_a, pos_a) = loop {
             let layer = rng.gen_range(0..layout.num_layers());
             let pos = rng.gen_range(0..NUM_KEYS);
-            if !PINNED_KEYS.contains(&(layer, pos)) {
+            if !pinned(layer, pos) {
                 break (layer, pos);
             }
         };
-        if matches!(layout.layout()[layer_a][pos_a], Key::Layer(_) | Key::Shift) {
+        let is_digit = layout.layout()[layer_a][pos_a]
+            .typed_char(false)
+            .map(|c| NUMBERS.contains(&c))
+            .unwrap_or(false);
+        if is_digit {
+            let layout_b = rng.gen_range(0..NUM_LAYOUTS.len() as u8);
+            Self::SwapNumLayout {
+                layout_a: layout.num_layout(),
+                layout_b,
+            }
+        } else if matches!(layout.layout()[layer_a][pos_a], Key::Layer(_) | Key::Shift) {
             assert_eq!(layer_a, 0);
             // Keep layer switch keys on home layer
             // to ensure every layer can be accessed.
             let pos_b = loop {
                 let pos = rng.gen_range(0..NUM_KEYS);
-                if !PINNED_KEYS.contains(&(0, pos)) {
+                let is_digit = layout.layout()[0][pos]
+                    .typed_char(false)
+                    .map(|c| NUMBERS.contains(&c))
+                    .unwrap_or(false);
+                if !pinned(0, pos) && !is_digit {
                     break pos;
                 }
             };
@@ -56,7 +78,12 @@ impl Mutation {
             let (layer_b, pos_b) = loop {
                 let layer = rng.gen_range(0..layout.num_layers());
                 let pos = rng.gen_range(0..NUM_KEYS);
-                if !PINNED_KEYS.contains(&(layer, pos))
+                let is_digit = layout.layout()[layer][pos]
+                    .typed_char(false)
+                    .map(|c| NUMBERS.contains(&c))
+                    .unwrap_or(false);
+                if !pinned(layer, pos)
+                    && !is_digit
                     && !matches!(layout.layout()[layer][pos], Key::Layer(_) | Key::Shift)
                 {
                     break (layer, pos);
@@ -74,20 +101,29 @@ impl Mutation {
     fn apply(self, layout: &mut AnnotatedLayout) {
         match self {
             Self::SwapKeys {
-                layer_a: l0,
-                pos_a: i,
-                layer_b: l1,
-                pos_b: j,
-            } => layout.swap((l0, i), (l1, j)),
-            // Self::SwapPaired { l0, l1, i, j } => {
-            //     layout.swap((l0, i), (l0, j));
-            //     layout.swap((l1, i), (l1, j));
-            // }
+                layer_a,
+                pos_a,
+                layer_b,
+                pos_b,
+            } => layout.swap((layer_a, pos_a), (layer_b, pos_b)),
+            Self::SwapNumLayout { layout_a, layout_b } => {
+                assert!(layout.num_layout() == layout_a);
+                layout.switch_to_num_layout(layout_b);
+            } // Self::SwapPaired { l0, l1, i, j } => {
+              //     layout.swap((l0, i), (l0, j));
+              //     layout.swap((l1, i), (l1, j));
+              // }
         }
     }
 
     fn undo(self, layout: &mut AnnotatedLayout) {
-        self.apply(layout)
+        match self {
+            Self::SwapKeys { .. } => self.apply(layout),
+            Self::SwapNumLayout { layout_a, layout_b } => {
+                assert!(layout.num_layout() == layout_b);
+                layout.switch_to_num_layout(layout_a);
+            }
+        }
     }
 }
 
@@ -130,4 +166,28 @@ pub fn optimise<M: CostModel>(
     }
     // eprintln!("improvement: {}", initial_energy - energy);
     (layout.into(), initial_energy - energy)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::fs::File;
+
+    use super::*;
+
+    #[test]
+    fn mutation_apply_undo_inverses() {
+        let f = File::open("qwerty.json").unwrap();
+        let layout: Layout = serde_json::from_reader(f).unwrap();
+        let mut layout: AnnotatedLayout = layout.into();
+
+        let mut rng = thread_rng();
+
+        for _ in 0..1000 {
+            let start = layout.clone();
+            let mutation = Mutation::gen(&mut rng, &layout);
+            mutation.apply(&mut layout);
+            mutation.undo(&mut layout);
+            assert_eq!(start.layout(), layout.layout());
+        }
+    }
 }

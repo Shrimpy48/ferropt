@@ -1173,12 +1173,34 @@ pub struct CharIdxEntry {
     pub shifted: bool,
 }
 
+lazy_static! {
+    pub static ref NUMBERS: [Win1252Char; 10] =
+        ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"].map(|s| s.try_into().unwrap());
+}
+
+pub static NUM_LAYOUTS: [[u8; 10]; 12] = [
+    [10, 11, 12, 13, 21, 22, 23, 1, 2, 3],
+    [19, 16, 17, 18, 26, 27, 28, 6, 7, 8],
+    [20, 21, 22, 23, 11, 12, 13, 1, 2, 3],
+    [29, 26, 27, 28, 16, 17, 18, 6, 7, 8],
+    [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+    [10, 11, 12, 13, 14, 15, 16, 17, 18, 19],
+    [20, 21, 22, 23, 24, 25, 26, 27, 28, 29],
+    [10, 11, 12, 13, 23, 26, 16, 17, 18, 19],
+    [0, 1, 2, 3, 4, 10, 11, 12, 13, 14],
+    [10, 11, 12, 13, 14, 20, 21, 22, 23, 24],
+    [5, 6, 7, 8, 9, 15, 16, 17, 18, 19],
+    [15, 16, 17, 18, 19, 25, 26, 27, 28, 29],
+];
+
 #[derive(Debug, Clone)]
 pub struct AnnotatedLayout {
     layout: Layout,
     char_idx: CharIdx,
     layer_idx: Vec<u8>,
     shift_idx: Option<u8>,
+    num_layout: u8,
+    num_layer: u8,
 }
 
 impl AnnotatedLayout {
@@ -1196,6 +1218,10 @@ impl AnnotatedLayout {
 
     pub fn shift_idx(&self) -> &Option<u8> {
         &self.shift_idx
+    }
+
+    pub fn num_layout(&self) -> u8 {
+        self.num_layout
     }
 
     pub fn num_layers(&self) -> u8 {
@@ -1284,6 +1310,74 @@ impl AnnotatedLayout {
         assert_eq!(b, self.layout[layer_a][pos_a]);
         assert_eq!(a, self.layout[layer_b][pos_b]);
     }
+
+    pub fn switch_to_num_layout(&mut self, new_layout: u8) {
+        debug_assert_eq!(
+            self.num_layout,
+            NUM_LAYOUTS
+                .iter()
+                .position(|&l| {
+                    NUMBERS
+                        .iter()
+                        .map(|&c| {
+                            let entry = self.char_idx[c].unwrap();
+                            assert_eq!(entry.layer, self.num_layer);
+                            entry.pos
+                        })
+                        .zip(l)
+                        .all(|(actual, desired)| actual == desired)
+                })
+                .unwrap() as u8
+        );
+
+        for (i, &new_pos) in NUM_LAYOUTS[new_layout as usize].iter().enumerate() {
+            let old_pos = self.char_idx[NUMBERS[i]].unwrap().pos;
+            assert_eq!(
+                self.char_idx[NUMBERS[i]],
+                Some(CharIdxEntry {
+                    layer: self.num_layer,
+                    pos: old_pos,
+                    shifted: false
+                })
+            );
+            assert_eq!(
+                self.layout[self.num_layer][old_pos].typed_char(false),
+                Some(NUMBERS[i])
+            );
+            self.swap((self.num_layer, old_pos), (self.num_layer, new_pos));
+            assert_eq!(
+                self.layout[self.num_layer][new_pos].typed_char(false),
+                Some(NUMBERS[i])
+            );
+            assert_eq!(
+                self.char_idx[NUMBERS[i]],
+                Some(CharIdxEntry {
+                    layer: self.num_layer,
+                    pos: new_pos,
+                    shifted: false
+                })
+            );
+        }
+        self.num_layout = new_layout;
+
+        debug_assert_eq!(
+            self.num_layout,
+            NUM_LAYOUTS
+                .iter()
+                .position(|&l| {
+                    NUMBERS
+                        .iter()
+                        .map(|&c| {
+                            let entry = self.char_idx[c].unwrap();
+                            assert_eq!(entry.layer, self.num_layer);
+                            entry.pos
+                        })
+                        .zip(l)
+                        .all(|(actual, desired)| actual == desired)
+                })
+                .unwrap() as u8
+        );
+    }
 }
 
 impl From<Layout> for AnnotatedLayout {
@@ -1333,11 +1427,31 @@ impl From<Layout> for AnnotatedLayout {
         let shift_idx = (0..)
             .zip(layout[0].iter())
             .find_map(|(i, k)| matches!(k, Key::Shift).then_some(i));
+
+        let num_layer = char_idx[NUMBERS[0]].unwrap().layer;
+
+        let num_layout = NUM_LAYOUTS
+            .iter()
+            .position(|&l| {
+                NUMBERS
+                    .iter()
+                    .map(|&c| {
+                        let entry = char_idx[c].unwrap();
+                        assert_eq!(entry.layer, num_layer);
+                        entry.pos
+                    })
+                    .zip(l)
+                    .all(|(actual, desired)| actual == desired)
+            })
+            .unwrap() as u8;
+
         Self {
             layout,
             char_idx,
             layer_idx,
             shift_idx,
+            num_layout,
+            num_layer,
         }
     }
 }
@@ -1410,12 +1524,12 @@ mod tests {
         let expected = {
             use TypingEvent::*;
             vec![
-                Hold(30),
+                Hold(33),
                 Tap {
                     pos: 15,
                     for_char: true,
                 },
-                Release(30),
+                Release(33),
                 Tap {
                     pos: 2,
                     for_char: true,
@@ -1440,7 +1554,7 @@ mod tests {
                     pos: 31,
                     for_char: true,
                 },
-                Hold(30),
+                Hold(33),
                 Tap {
                     pos: 1,
                     for_char: true,
@@ -1461,10 +1575,10 @@ mod tests {
                     pos: 12,
                     for_char: true,
                 },
-                Release(30),
+                Release(33),
                 Hold(32),
                 Tap {
-                    pos: 15,
+                    pos: 19,
                     for_char: true,
                 },
                 Release(32),
@@ -1474,27 +1588,23 @@ mod tests {
                 },
                 Hold(32),
                 Tap {
-                    pos: 13,
+                    pos: 12,
+                    for_char: true,
+                },
+                Tap {
+                    pos: 21,
                     for_char: true,
                 },
                 Release(32),
                 Hold(30),
-                Hold(32),
-                Tap {
-                    pos: 12,
-                    for_char: true,
-                },
-                Release(32),
-                Release(30),
-                Hold(33),
-                Tap {
-                    pos: 1,
-                    for_char: true,
-                },
-                Release(33),
-                Hold(32),
                 Tap {
                     pos: 16,
+                    for_char: true,
+                },
+                Release(30),
+                Hold(32),
+                Tap {
+                    pos: 13,
                     for_char: true,
                 },
                 Release(32),
@@ -1515,7 +1625,7 @@ mod tests {
             use TypingEvent::*;
             vec![
                 Tap {
-                    pos: 30,
+                    pos: 33,
                     for_char: false,
                 },
                 Tap {
@@ -1546,7 +1656,7 @@ mod tests {
                     pos: 31,
                     for_char: true,
                 },
-                Hold(30),
+                Hold(33),
                 Tap {
                     pos: 1,
                     for_char: true,
@@ -1567,17 +1677,35 @@ mod tests {
                     pos: 12,
                     for_char: true,
                 },
-                Release(30),
+                Release(33),
                 Tap {
                     pos: 32,
                     for_char: false,
                 },
                 Tap {
-                    pos: 15,
+                    pos: 19,
                     for_char: true,
                 },
                 Tap {
                     pos: 31,
+                    for_char: true,
+                },
+                Hold(32),
+                Tap {
+                    pos: 12,
+                    for_char: true,
+                },
+                Tap {
+                    pos: 21,
+                    for_char: true,
+                },
+                Release(32),
+                Tap {
+                    pos: 30,
+                    for_char: false,
+                },
+                Tap {
+                    pos: 16,
                     for_char: true,
                 },
                 Tap {
@@ -1586,34 +1714,6 @@ mod tests {
                 },
                 Tap {
                     pos: 13,
-                    for_char: true,
-                },
-                Tap {
-                    pos: 30,
-                    for_char: false,
-                },
-                Tap {
-                    pos: 32,
-                    for_char: false,
-                },
-                Tap {
-                    pos: 12,
-                    for_char: true,
-                },
-                Tap {
-                    pos: 33,
-                    for_char: false,
-                },
-                Tap {
-                    pos: 1,
-                    for_char: true,
-                },
-                Tap {
-                    pos: 32,
-                    for_char: false,
-                },
-                Tap {
-                    pos: 16,
                     for_char: true,
                 },
             ]
