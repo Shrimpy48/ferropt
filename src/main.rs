@@ -8,6 +8,7 @@ use rayon::iter;
 use rayon::prelude::*;
 use std::fs::File;
 use std::io;
+use std::num::NonZeroU16;
 use std::path::PathBuf;
 use std::time::Instant;
 
@@ -17,8 +18,8 @@ struct Args {
     quiet: bool,
     #[clap(short = 'n', long, value_parser, default_value_t = 10_000)]
     iterations: u32,
-    #[clap(short, long, value_parser, default_value_t = 5)]
-    trials: u32,
+    #[clap(short, long, value_parser, default_value = "5")]
+    trials: NonZeroU16,
     #[clap(short, long, value_parser, default_value = "corpus")]
     corpus: PathBuf,
     #[clap(short = 'l', long, value_parser, default_value = "initial.json")]
@@ -53,8 +54,10 @@ fn run_trials(args: &Args, corpus: &[Vec<Win1252Char>], layout: &Layout) -> (Lay
 
     let cost_model = Model::default();
 
+    let trials = args.trials.get() as usize;
+
     let results: Vec<_> = if args.quiet {
-        iter::repeatn(layout, args.trials as usize)
+        iter::repeatn(layout, trials)
             .map(|l| optimise(&cost_model, args.iterations, l.clone(), corpus, |_i| {}))
             .collect()
     } else {
@@ -63,7 +66,7 @@ fn run_trials(args: &Args, corpus: &[Vec<Win1252Char>], layout: &Layout) -> (Lay
 
         let bars: Vec<_> =
             std::iter::repeat_with(|| multiprog.add(ProgressBar::new(args.iterations.into())))
-                .take(args.trials as usize)
+                .take(trials)
                 .collect();
 
         for bar in bars.iter() {
@@ -73,7 +76,7 @@ fn run_trials(args: &Args, corpus: &[Vec<Win1252Char>], layout: &Layout) -> (Lay
         rayon::join(
             || multiprog.join_and_clear().unwrap(),
             || {
-                iter::repeatn(layout, args.trials as usize)
+                iter::repeatn(layout, trials)
                     .zip(bars)
                     .map(|(l, bar)| {
                         let res = optimise(&cost_model, args.iterations, l.clone(), corpus, |i| {
@@ -96,15 +99,15 @@ fn run_trials(args: &Args, corpus: &[Vec<Win1252Char>], layout: &Layout) -> (Lay
 
     // let results = vec![optimise(n, layout.clone(), corpus, |_i| {})];
 
-    let mean = results.iter().map(|(_, i)| i).sum::<f64>() / args.trials as f64;
-    let var = results.iter().map(|(_, i)| (i - mean).powi(2)).sum::<f64>() / args.trials as f64;
+    let mean = results.iter().map(|(_, i)| i).sum::<f64>() / trials as f64;
+    let var = results.iter().map(|(_, i)| (i - mean).powi(2)).sum::<f64>() / trials as f64;
     let std_dev = var.sqrt();
 
     let mad = results
         .iter()
         .flat_map(|(a, _)| results.iter().map(|(b, _)| a.hamming_dist(b) as u32))
         .sum::<u32>() as f64
-        / (args.trials * args.trials) as f64;
+        / (trials * trials) as f64;
 
     let best = results
         .into_iter()
