@@ -2,7 +2,7 @@ use lazy_static::lazy_static;
 
 use crate::layout::{
     finger_for_pos, AnnotatedLayout, CharIdx, Finger, Hand, Layer, TypingEvent, Win1252Char,
-    NUMBERS, NUM_KEYS,
+    LOWER_ALPHA, NUM_KEYS, UPPER_ALPHA,
 };
 
 use super::{log_norm, CostModel};
@@ -211,7 +211,7 @@ fn held_key_cost(i: u8, j: u8) -> u8 {
     };
     if d0 == d1 {
         // Same finger.
-        100
+        u8::MAX
     } else if h0 == h1 {
         // Same hand, different finger.
         if f0 == Finger::Thumb {
@@ -284,17 +284,6 @@ lazy_static! {
         [";", ":"],
     ]
     .map(|p| p.map(|s| s.try_into().unwrap()));
-    static ref SPACE: Win1252Char = " ".try_into().unwrap();
-    static ref LOWER_ALPHA: [Win1252Char; 26] = [
-        "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r",
-        "s", "t", "u", "v", "w", "x", "y", "z",
-    ]
-    .map(|s| s.try_into().unwrap());
-    static ref UPPER_ALPHA: [Win1252Char; 26] = [
-        "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R",
-        "S", "T", "U", "V", "W", "X", "Y", "Z",
-    ]
-    .map(|s| s.try_into().unwrap());
     static ref MATHS_SYMBOLS: [Win1252Char; 13] =
         ["+", "-", "*", "/", "%", "=", "!", "@", "<", ">", "^", "&", "|",]
             .map(|s| s.try_into().unwrap());

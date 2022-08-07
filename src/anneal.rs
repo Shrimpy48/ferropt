@@ -4,15 +4,37 @@ use rand::{thread_rng, Rng};
 use std::cmp;
 
 use crate::cost::CostModel;
-use crate::layout::{AnnotatedLayout, Key, Layout, Win1252Char, NUMBERS, NUM_KEYS, NUM_LAYOUTS};
+use crate::layout::{
+    AnnotatedLayout, Key, Layout, Win1252Char, LOWER_ALPHA, NUMBERS, NUM_KEYS, NUM_LAYOUTS,
+    UPPER_ALPHA,
+};
 
 lazy_static! {
     /// Keys which the optimiser may not move.
     static ref PINNED_KEYS: Vec<(u8, u8)> = vec![(0, 31)];
 }
 
-fn pinned(layer: u8, pos: u8) -> bool {
-    PINNED_KEYS.contains(&(layer, pos))
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PinnedTo {
+    Layer,
+    Key,
+    Position,
+}
+
+fn pinned(layout: &AnnotatedLayout, layer: u8, pos: u8) -> Option<PinnedTo> {
+    if PINNED_KEYS.contains(&(layer, pos)) {
+        Some(PinnedTo::Position)
+    } else if matches!(layout.layout()[layer][pos], Key::Layer(_) | Key::Shift) {
+        Some(PinnedTo::Layer)
+    } else if let Some(c) = layout.layout()[layer][pos].typed_char(false) {
+        if LOWER_ALPHA.contains(&c) || UPPER_ALPHA.contains(&c) {
+            Some(PinnedTo::Layer)
+        } else {
+            None
+        }
+    } else {
+        None
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -37,11 +59,12 @@ enum Mutation {
 
 impl Mutation {
     fn gen<R: Rng>(mut rng: R, layout: &AnnotatedLayout) -> Self {
-        let (layer_a, pos_a) = loop {
+        let (layer_a, pos_a, a_pinned_to) = loop {
             let layer = rng.gen_range(0..layout.num_layers());
             let pos = rng.gen_range(0..NUM_KEYS);
-            if !pinned(layer, pos) {
-                break (layer, pos);
+            let pinned_to = pinned(layout, layer, pos);
+            if pinned_to != Some(PinnedTo::Position) {
+                break (layer, pos, pinned_to);
             }
         };
         let is_digit = layout.layout()[layer_a][pos_a]
@@ -54,46 +77,72 @@ impl Mutation {
                 layout_a: layout.num_layout(),
                 layout_b,
             }
-        } else if matches!(layout.layout()[layer_a][pos_a], Key::Layer(_) | Key::Shift) {
-            assert_eq!(layer_a, 0);
-            // Keep layer switch keys on home layer
-            // to ensure every layer can be accessed.
-            let pos_b = loop {
-                let pos = rng.gen_range(0..NUM_KEYS);
-                let is_digit = layout.layout()[0][pos]
-                    .typed_char(false)
-                    .map(|c| NUMBERS.contains(&c))
-                    .unwrap_or(false);
-                if !pinned(0, pos) && !is_digit {
-                    break pos;
-                }
-            };
-            Self::SwapKeys {
-                layer_a: 0,
-                layer_b: 0,
-                pos_a,
-                pos_b,
-            }
         } else {
-            let (layer_b, pos_b) = loop {
-                let layer = rng.gen_range(0..layout.num_layers());
-                let pos = rng.gen_range(0..NUM_KEYS);
-                let is_digit = layout.layout()[layer][pos]
-                    .typed_char(false)
-                    .map(|c| NUMBERS.contains(&c))
-                    .unwrap_or(false);
-                if !pinned(layer, pos)
-                    && !is_digit
-                    && !matches!(layout.layout()[layer][pos], Key::Layer(_) | Key::Shift)
-                {
-                    break (layer, pos);
+            match a_pinned_to {
+                Some(PinnedTo::Layer) => {
+                    let pos_b = loop {
+                        let pos = rng.gen_range(0..NUM_KEYS);
+                        let is_digit = layout.layout()[layer_a][pos]
+                            .typed_char(false)
+                            .map(|c| NUMBERS.contains(&c))
+                            .unwrap_or(false);
+                        if !matches!(
+                            pinned(layout, layer_a, pos),
+                            Some(PinnedTo::Key | PinnedTo::Position)
+                        ) && !is_digit
+                        {
+                            break pos;
+                        }
+                    };
+                    Self::SwapKeys {
+                        layer_a,
+                        layer_b: layer_a,
+                        pos_a,
+                        pos_b,
+                    }
                 }
-            };
-            Self::SwapKeys {
-                layer_a,
-                layer_b,
-                pos_a,
-                pos_b,
+                Some(PinnedTo::Key) => {
+                    let layer_b = loop {
+                        let layer = rng.gen_range(0..layout.num_layers());
+                        let is_digit = layout.layout()[layer][pos_a]
+                            .typed_char(false)
+                            .map(|c| NUMBERS.contains(&c))
+                            .unwrap_or(false);
+                        if !matches!(
+                            pinned(layout, layer, pos_a),
+                            Some(PinnedTo::Layer | PinnedTo::Position)
+                        ) && !is_digit
+                        {
+                            break layer;
+                        }
+                    };
+                    Self::SwapKeys {
+                        layer_a,
+                        layer_b,
+                        pos_a,
+                        pos_b: pos_a,
+                    }
+                }
+                Some(PinnedTo::Position) => unreachable!(),
+                None => {
+                    let (layer_b, pos_b) = loop {
+                        let layer = rng.gen_range(0..layout.num_layers());
+                        let pos = rng.gen_range(0..NUM_KEYS);
+                        let is_digit = layout.layout()[layer][pos]
+                            .typed_char(false)
+                            .map(|c| NUMBERS.contains(&c))
+                            .unwrap_or(false);
+                        if pinned(layout, layer, pos).is_none() && !is_digit {
+                            break (layer, pos);
+                        }
+                    };
+                    Self::SwapKeys {
+                        layer_a,
+                        layer_b,
+                        pos_a,
+                        pos_b,
+                    }
+                }
             }
         }
     }
@@ -177,6 +226,45 @@ mod tests {
     #[test]
     fn mutation_apply_undo_inverses() {
         let f = File::open("qwerty.json").unwrap();
+        let layout: Layout = serde_json::from_reader(f).unwrap();
+        let mut layout: AnnotatedLayout = layout.into();
+
+        let mut rng = thread_rng();
+
+        for _ in 0..1000 {
+            let start = layout.clone();
+            let mutation = Mutation::gen(&mut rng, &layout);
+            mutation.apply(&mut layout);
+            mutation.undo(&mut layout);
+            assert_eq!(start.layout(), layout.layout());
+        }
+    }
+
+    #[test]
+    fn mutation_apply_undo_shuffled() {
+        let f = File::open("qwerty.json").unwrap();
+        let layout: Layout = serde_json::from_reader(f).unwrap();
+        let mut layout: AnnotatedLayout = layout.into();
+
+        let mut rng = thread_rng();
+
+        for _ in 0..1000 {
+            let mutation = Mutation::gen(&mut rng, &layout);
+            mutation.apply(&mut layout);
+        }
+
+        for _ in 0..1000 {
+            let start = layout.clone();
+            let mutation = Mutation::gen(&mut rng, &layout);
+            mutation.apply(&mut layout);
+            mutation.undo(&mut layout);
+            assert_eq!(start.layout(), layout.layout());
+        }
+    }
+
+    #[test]
+    fn mutation_apply_undo_optimised() {
+        let f = File::open("optimised_noshifted.json").unwrap();
         let layout: Layout = serde_json::from_reader(f).unwrap();
         let mut layout: AnnotatedLayout = layout.into();
 

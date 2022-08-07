@@ -183,7 +183,7 @@ lazy_static! {
     static ref GRAVE: Win1252Char = "`".try_into().unwrap();
     static ref MINUS: Win1252Char = "-".try_into().unwrap();
     static ref EQUALS: Win1252Char = "=".try_into().unwrap();
-    static ref SPACE: Win1252Char = " ".try_into().unwrap();
+    pub static ref SPACE: Win1252Char = " ".try_into().unwrap();
 }
 lazy_static! {
     static ref SHIFT_A: Win1252Char = "A".try_into().unwrap();
@@ -1176,16 +1176,35 @@ pub struct CharIdxEntry {
 lazy_static! {
     pub static ref NUMBERS: [Win1252Char; 10] =
         ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"].map(|s| s.try_into().unwrap());
+    pub static ref LOWER_ALPHA: [Win1252Char; 26] = [
+        "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r",
+        "s", "t", "u", "v", "w", "x", "y", "z",
+    ]
+    .map(|s| s.try_into().unwrap());
+    pub static ref UPPER_ALPHA: [Win1252Char; 26] = [
+        "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R",
+        "S", "T", "U", "V", "W", "X", "Y", "Z",
+    ]
+    .map(|s| s.try_into().unwrap());
 }
 
-pub static NUM_LAYOUTS: [[u8; 10]; 12] = [
+pub static NUM_LAYOUTS: [[u8; 10]; 21] = [
     [10, 11, 12, 13, 21, 22, 23, 1, 2, 3],
+    [14, 11, 12, 13, 21, 22, 23, 1, 2, 3],
     [19, 16, 17, 18, 26, 27, 28, 6, 7, 8],
+    [15, 16, 17, 18, 26, 27, 28, 6, 7, 8],
     [20, 21, 22, 23, 11, 12, 13, 1, 2, 3],
+    [10, 21, 22, 23, 11, 12, 13, 1, 2, 3],
+    [14, 21, 22, 23, 11, 12, 13, 1, 2, 3],
     [29, 26, 27, 28, 16, 17, 18, 6, 7, 8],
+    [19, 26, 27, 28, 16, 17, 18, 6, 7, 8],
+    [15, 26, 27, 28, 16, 17, 18, 6, 7, 8],
     [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+    [9, 0, 1, 2, 3, 4, 5, 6, 7, 8],
     [10, 11, 12, 13, 14, 15, 16, 17, 18, 19],
+    [19, 10, 11, 12, 13, 14, 15, 16, 17, 18],
     [20, 21, 22, 23, 24, 25, 26, 27, 28, 29],
+    [29, 20, 21, 22, 23, 24, 25, 26, 27, 28],
     [10, 11, 12, 13, 23, 26, 16, 17, 18, 19],
     [0, 1, 2, 3, 4, 10, 11, 12, 13, 14],
     [10, 11, 12, 13, 14, 20, 21, 22, 23, 24],

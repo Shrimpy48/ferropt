@@ -9,6 +9,10 @@ edition = "2021"
 name = "text_to_keys"
 harness = false
 
+[[bench]]
+name = "cost"
+harness = false
+
 [features]
 dhat-heap = [ "dhat" ]
 dhat-ad-hoc = [ "dhat" ]
