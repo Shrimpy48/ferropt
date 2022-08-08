@@ -15,7 +15,7 @@ impl Default for Model {
 }
 
 impl CostModel for Model {
-    fn cost_of_typing(&self, keys: impl Iterator<Item = TypingEvent>) -> (u64, u64) {
+    fn cost_of_typing(&self, keys: impl Iterator<Item = TypingEvent>) -> (f64, u64) {
         let mut last_used = enum_map! {
             Digit::LeftPinky => LastUsedEntry {
                 at: None,
@@ -97,8 +97,9 @@ impl CostModel for Model {
                 _ => {}
             }
         }
-        (total_cost, count)
+        (total_cost as f64, count)
     }
+
     fn layout_cost(&self, _layout: &AnnotatedLayout) -> f64 {
         0.
     }

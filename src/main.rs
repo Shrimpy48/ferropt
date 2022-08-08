@@ -1,5 +1,5 @@
 use ferropt::anneal::*;
-use ferropt::cost::heuristic::Model;
+use ferropt::cost::measured::Model;
 use ferropt::layout::*;
 
 use clap::Parser;

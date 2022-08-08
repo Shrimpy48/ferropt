@@ -16,7 +16,7 @@ impl Default for Model {
 }
 
 impl CostModel for Model {
-    fn cost_of_typing(&self, keys: impl Iterator<Item = TypingEvent>) -> (u64, u64) {
+    fn cost_of_typing(&self, keys: impl Iterator<Item = TypingEvent>) -> (f64, u64) {
         let mut held_keys = Vec::new();
         let mut prev_key = None;
         let mut total_cost = 0;
@@ -53,8 +53,9 @@ impl CostModel for Model {
                 }
             }
         }
-        (total_cost, count)
+        (total_cost as f64, count)
     }
+
     fn layout_cost(&self, layout: &AnnotatedLayout) -> f64 {
         similarity_cost(layout) + memorability_cost(layout)
     }

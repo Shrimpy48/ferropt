@@ -591,13 +591,19 @@ impl TryFrom<serde_json::Value> for Key {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 #[repr(transparent)]
 pub struct Layer<T>(pub(crate) [T; NUM_KEYS as usize]);
 
 impl<T> Layer<T> {
     pub(crate) fn iter(&self) -> impl Iterator<Item = &T> {
         self.0.iter()
+    }
+}
+
+impl<T: fmt::Debug> Layer<T> {
+    pub(crate) fn from_fun<F: FnMut(u8) -> T>(f: F) -> Self {
+        Self((0..NUM_KEYS).map(f).collect::<Vec<_>>().try_into().unwrap())
     }
 }
 
@@ -642,6 +648,43 @@ impl<T> Index<u8> for Layer<T> {
 impl<T> IndexMut<u8> for Layer<T> {
     fn index_mut(&mut self, index: u8) -> &mut Self::Output {
         &mut self.0[index as usize]
+    }
+}
+
+impl<T: fmt::Debug> fmt::Debug for Layer<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if f.alternate() {
+            writeln!(f, "Layer([")?;
+            for r in 0..3 {
+                write!(f, "    ")?;
+                for c in 0..5 {
+                    write!(f, "{:4.2?}, ", self.0[r * 10 + c])?;
+                }
+                write!(f, " ")?;
+                for c in 5..10 {
+                    write!(f, "{:4.2?}, ", self.0[r * 10 + c])?;
+                }
+                writeln!(f)?;
+            }
+            write!(f, "    ")?;
+            write!(f, "{}", " ".repeat(6 * 3))?;
+            let r = 3;
+            for c in 0..2 {
+                write!(f, "{:4.2?}, ", self.0[r * 10 + c])?;
+            }
+            write!(f, " ")?;
+            for c in 2..4 {
+                write!(f, "{:4.2?}, ", self.0[r * 10 + c])?;
+            }
+            writeln!(f)?;
+            write!(f, "])")
+        } else {
+            write!(f, "Layer(")?;
+            let mut list = f.debug_list();
+            list.entries(self.0.iter());
+            list.finish()?;
+            write!(f, ")")
+        }
     }
 }
 
@@ -1188,7 +1231,7 @@ lazy_static! {
     .map(|s| s.try_into().unwrap());
 }
 
-pub static NUM_LAYOUTS: [[u8; 10]; 21] = [
+pub static NUM_LAYOUTS: [[u8; 10]; 22] = [
     [10, 11, 12, 13, 21, 22, 23, 1, 2, 3],
     [14, 11, 12, 13, 21, 22, 23, 1, 2, 3],
     [19, 16, 17, 18, 26, 27, 28, 6, 7, 8],
@@ -1206,6 +1249,7 @@ pub static NUM_LAYOUTS: [[u8; 10]; 21] = [
     [20, 21, 22, 23, 24, 25, 26, 27, 28, 29],
     [29, 20, 21, 22, 23, 24, 25, 26, 27, 28],
     [10, 11, 12, 13, 23, 26, 16, 17, 18, 19],
+    [10, 11, 12, 13, 3, 6, 16, 17, 18, 19],
     [0, 1, 2, 3, 4, 10, 11, 12, 13, 14],
     [10, 11, 12, 13, 14, 20, 21, 22, 23, 24],
     [5, 6, 7, 8, 9, 15, 16, 17, 18, 19],
