@@ -797,7 +797,7 @@ pub enum Finger {
 #[repr(u8)]
 pub enum Hand {
     Left,
-    Right = 0b10000000,
+    Right,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Enum)]
@@ -808,7 +808,7 @@ pub enum Digit {
     LeftMiddle,
     LeftIndex,
     LeftThumb,
-    RightPinky = 0b10000000,
+    RightPinky,
     RightRing,
     RightMiddle,
     RightIndex,
@@ -817,21 +817,19 @@ pub enum Digit {
 
 impl Digit {
     pub fn hand(self) -> Hand {
-        // SAFETY: Digit is simply Hand | Finger,
-        // whose valid bit patterns do not overlap.
-        unsafe { std::mem::transmute(self as u8 & 0b10000000) }
+        if self as u8 >= 5 {
+            Hand::Right
+        } else {
+            Hand::Left
+        }
     }
 
     pub fn finger(self) -> Finger {
-        // SAFETY: Digit is simply Hand | Finger,
-        // whose valid bit patterns do not overlap.
-        unsafe { std::mem::transmute(self as u8 & 0b01111111) }
+        unsafe { std::mem::transmute(self as u8 % 5) }
     }
 
     pub fn new(hand: Hand, finger: Finger) -> Self {
-        // SAFETY: Digit is simply Hand | Finger,
-        // whose valid bit patterns do not overlap.
-        unsafe { std::mem::transmute(hand as u8 | finger as u8) }
+        unsafe { std::mem::transmute(hand as u8 * 5 + finger as u8) }
     }
 }
 
