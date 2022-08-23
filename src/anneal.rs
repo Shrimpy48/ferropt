@@ -72,7 +72,12 @@ impl Mutation {
             .map(|c| NUMBERS.contains(&c))
             .unwrap_or(false);
         if is_digit {
-            let layout_b = rng.gen_range(0..NUM_LAYOUTS.len() as u8);
+            let layout_b = loop {
+                let layout_b = rng.gen_range(0..NUM_LAYOUTS.len() as u8);
+                if layout_b != layout.num_layout() {
+                    break layout_b;
+                }
+            };
             Self::SwapNumLayout {
                 layout_a: layout.num_layout(),
                 layout_b,
@@ -90,6 +95,7 @@ impl Mutation {
                             pinned(layout, layer_a, pos),
                             Some(PinnedTo::Key | PinnedTo::Position)
                         ) && !is_digit
+                            && layout.layout()[layer_a][pos] != layout.layout()[layer_a][pos_a]
                         {
                             break pos;
                         }
@@ -112,6 +118,7 @@ impl Mutation {
                             pinned(layout, layer, pos_a),
                             Some(PinnedTo::Layer | PinnedTo::Position)
                         ) && !is_digit
+                            && layout.layout()[layer][pos_a] != layout.layout()[layer_a][pos_a]
                         {
                             break layer;
                         }
@@ -132,7 +139,10 @@ impl Mutation {
                             .typed_char(false)
                             .map(|c| NUMBERS.contains(&c))
                             .unwrap_or(false);
-                        if pinned(layout, layer, pos).is_none() && !is_digit {
+                        if pinned(layout, layer, pos).is_none()
+                            && !is_digit
+                            && layout.layout()[layer][pos] != layout.layout()[layer_a][pos_a]
+                        {
                             break (layer, pos);
                         }
                     };
