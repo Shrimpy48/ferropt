@@ -132,6 +132,7 @@ pub enum KeyCode {
     Minus,
     Equals,
     Space,
+    Enter,
 }
 
 lazy_static! {
@@ -184,6 +185,7 @@ lazy_static! {
     static ref MINUS: Win1252Char = "-".try_into().unwrap();
     static ref EQUALS: Win1252Char = "=".try_into().unwrap();
     pub static ref SPACE: Win1252Char = " ".try_into().unwrap();
+    pub static ref ENTER: Win1252Char = "\n".try_into().unwrap();
 }
 lazy_static! {
     static ref SHIFT_A: Win1252Char = "A".try_into().unwrap();
@@ -235,6 +237,7 @@ lazy_static! {
     static ref SHIFT_MINUS: Win1252Char = "_".try_into().unwrap();
     static ref SHIFT_EQUALS: Win1252Char = "+".try_into().unwrap();
     static ref SHIFT_SPACE: Win1252Char = " ".try_into().unwrap();
+    static ref SHIFT_ENTER: Win1252Char = "\n".try_into().unwrap();
 }
 
 impl KeyCode {
@@ -289,6 +292,7 @@ impl KeyCode {
             Self::Minus => *MINUS,
             Self::Equals => *EQUALS,
             Self::Space => *SPACE,
+            Self::Enter => *ENTER,
         }
     }
 
@@ -343,6 +347,7 @@ impl KeyCode {
             Self::Minus => *SHIFT_MINUS,
             Self::Equals => *SHIFT_EQUALS,
             Self::Space => *SHIFT_SPACE,
+            Self::Enter => *SHIFT_ENTER,
         }
     }
 }
@@ -399,6 +404,7 @@ impl fmt::Display for KeyCode {
             Self::Minus => write!(f, "KC_MINS"),
             Self::Equals => write!(f, "KC_EQL"),
             Self::Space => write!(f, "KC_SPC"),
+            Self::Enter => write!(f, "KC_ENT"),
         }
     }
 }
@@ -457,6 +463,7 @@ impl FromStr for KeyCode {
             "KC_MINS" => Ok(Self::Minus),
             "KC_EQL" => Ok(Self::Equals),
             "KC_SPC" => Ok(Self::Space),
+            "KC_ENT" => Ok(Self::Enter),
             _ => Err(ParseError::UnknownValue(s.to_string())),
         }
     }
@@ -1575,7 +1582,7 @@ mod tests {
     fn keys_helloworld() {
         let f = File::open("qwerty.json").unwrap();
         let layout: Layout = serde_json::from_reader(f).unwrap();
-        let string = "Hello, WORLD! (~1)".to_owned();
+        let string = "Hello, WORLD!\n(~1)".to_owned();
         let expected = {
             use TypingEvent::*;
             vec![
@@ -1597,9 +1604,7 @@ mod tests {
                 Release(33),
                 Hold(32),
                 Tap(19),
-                Release(32),
                 Tap(31),
-                Hold(32),
                 Tap(12),
                 Tap(21),
                 Release(32),
@@ -1621,7 +1626,7 @@ mod tests {
     fn oneshot_helloworld() {
         let f = File::open("qwerty.json").unwrap();
         let layout: Layout = serde_json::from_reader(f).unwrap();
-        let string = "Hello, WORLD! (~1)".to_owned();
+        let string = "Hello, WORLD!\n(~1)".to_owned();
         let expected = {
             use TypingEvent::*;
             vec![
@@ -1640,10 +1645,9 @@ mod tests {
                 Tap(18),
                 Tap(12),
                 Release(33),
-                Tap(32),
+                Hold(32),
                 Tap(19),
                 Tap(31),
-                Hold(32),
                 Tap(12),
                 Tap(21),
                 Release(32),

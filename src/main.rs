@@ -18,6 +18,10 @@ struct Args {
     quiet: bool,
     #[clap(short = 'n', long, value_parser, default_value_t = 10_000)]
     iterations: u32,
+    #[clap(short = 'k', long, value_parser, default_value_t = 10.)]
+    cooling_rate: f64,
+    #[clap(short = 's', long, value_parser, default_value_t = 1.5)]
+    temp_scale: f64,
     #[clap(short, long, value_parser, default_value = "5")]
     trials: NonZeroU16,
     #[clap(short, long, value_parser, default_value = "corpus")]
@@ -58,7 +62,17 @@ fn run_trials(args: &Args, corpus: &[Vec<Win1252Char>], layout: &Layout) -> (Lay
 
     let results: Vec<_> = if args.quiet {
         iter::repeatn(layout, trials)
-            .map(|l| optimise(&cost_model, args.iterations, l.clone(), corpus, |_i| {}))
+            .map(|l| {
+                optimise(
+                    &cost_model,
+                    args.iterations,
+                    args.cooling_rate,
+                    args.temp_scale,
+                    l.clone(),
+                    corpus,
+                    |_i| {},
+                )
+            })
             .collect()
     } else {
         let multiprog = MultiProgress::new();
@@ -79,9 +93,15 @@ fn run_trials(args: &Args, corpus: &[Vec<Win1252Char>], layout: &Layout) -> (Lay
                 iter::repeatn(layout, trials)
                     .zip(bars)
                     .map(|(l, bar)| {
-                        let res = optimise(&cost_model, args.iterations, l.clone(), corpus, |i| {
-                            bar.set_position(i.into())
-                        });
+                        let res = optimise(
+                            &cost_model,
+                            args.iterations,
+                            args.cooling_rate,
+                            args.temp_scale,
+                            l.clone(),
+                            corpus,
+                            |i| bar.set_position(i.into()),
+                        );
                         bar.finish();
                         res
                     })

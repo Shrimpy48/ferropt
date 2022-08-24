@@ -186,15 +186,14 @@ impl Mutation {
     }
 }
 
-// const N: u32 = 50000;
-// const T0: f64 = 20.;
-const K: f64 = 10.;
 const P0: f64 = 1.;
 
 /// Optimise the layout using simulated annealing.
 pub fn optimise<M: CostModel>(
     cost_model: M,
     n: u32,
+    k: f64,
+    temp_scale: f64,
     layout: Layout,
     corpus: &[Vec<Win1252Char>],
     mut progress_callback: impl FnMut(u32),
@@ -202,7 +201,7 @@ pub fn optimise<M: CostModel>(
     let mut layout: AnnotatedLayout = layout.into();
     let mut rng = thread_rng();
     let initial_energy = cost_model.cost(corpus, &layout);
-    let t0 = initial_energy;
+    let t0 = initial_energy * temp_scale;
     let mut energy = initial_energy;
     for i in 0..n {
         progress_callback(i);
@@ -212,7 +211,7 @@ pub fn optimise<M: CostModel>(
         match new_energy.partial_cmp(&energy).unwrap() {
             cmp::Ordering::Less | cmp::Ordering::Equal => {}
             cmp::Ordering::Greater => {
-                let temperature = t0 * (-K * i as f64 / n as f64).exp();
+                let temperature = t0 * (-k * i as f64 / n as f64).exp();
                 let p = P0 * ((energy - new_energy) / temperature).exp();
                 if !rng.gen_bool(p) {
                     mutation.undo(&mut layout);
