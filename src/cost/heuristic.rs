@@ -16,23 +16,19 @@ impl Default for Model {
 }
 
 impl CostModel for Model {
-    fn cost_of_typing(&self, keys: impl Iterator<Item = TypingEvent>) -> (f64, u64) {
+    fn cost_of_typing(&self, keys: impl Iterator<Item = TypingEvent>) -> f64 {
         let mut held_keys = Vec::new();
         let mut prev_key = None;
         let mut total_cost = 0;
-        let mut count = 0;
         for event in keys {
             match event {
-                TypingEvent::Tap { pos, for_char } => {
+                TypingEvent::Tap(pos) => {
                     total_cost += KEY_COST[pos] as u64;
                     for held in held_keys.iter() {
                         total_cost += HELD_KEY_COST[*held][pos] as u64;
                     }
                     if let Some(prev) = prev_key {
                         total_cost += NEXT_KEY_COST[prev][pos] as u64;
-                    }
-                    if for_char {
-                        count += 1;
                     }
                     prev_key = Some(pos);
                 }
@@ -53,7 +49,7 @@ impl CostModel for Model {
                 }
             }
         }
-        (total_cost as f64, count)
+        total_cost as f64
     }
 
     fn layout_cost(&self, layout: &AnnotatedLayout) -> f64 {

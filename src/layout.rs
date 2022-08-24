@@ -915,10 +915,7 @@ where
                         self.cur_layer = layer;
                     }
 
-                    self.buf.push_back(TypingEvent::Tap {
-                        pos,
-                        for_char: true,
-                    });
+                    self.buf.push_back(TypingEvent::Tap(pos));
                     true
                 }
                 None => {
@@ -1105,7 +1102,7 @@ where
                     for i in 0.. {
                         match self.events.peek_nth(i).copied() {
                             None => panic!("{pos} held but not released"),
-                            Some(TypingEvent::Tap { .. } | TypingEvent::Unknown) => {
+                            Some(TypingEvent::Tap(_) | TypingEvent::Unknown) => {
                                 if used {
                                     // The hold is used for multiple keys, so should stay a hold.
                                     return Some(TypingEvent::Hold(pos));
@@ -1123,10 +1120,7 @@ where
                                     true => {
                                         // The hold is used for 1 tap, so should be oneshot.
                                         self.events.remove_nth(i);
-                                        return Some(TypingEvent::Tap {
-                                            pos,
-                                            for_char: false,
-                                        });
+                                        return Some(TypingEvent::Tap(pos));
                                     }
                                 }
                             }
@@ -1154,7 +1148,7 @@ impl<I> FusedIterator for Oneshot<I> where
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TypingEvent {
-    Tap { pos: u8, for_char: bool },
+    Tap(u8),
     Hold(u8),
     Release(u8),
     Unknown,
@@ -1586,88 +1580,34 @@ mod tests {
             use TypingEvent::*;
             vec![
                 Hold(33),
-                Tap {
-                    pos: 15,
-                    for_char: true,
-                },
+                Tap(15),
                 Release(33),
-                Tap {
-                    pos: 2,
-                    for_char: true,
-                },
-                Tap {
-                    pos: 18,
-                    for_char: true,
-                },
-                Tap {
-                    pos: 18,
-                    for_char: true,
-                },
-                Tap {
-                    pos: 8,
-                    for_char: true,
-                },
-                Tap {
-                    pos: 27,
-                    for_char: true,
-                },
-                Tap {
-                    pos: 31,
-                    for_char: true,
-                },
+                Tap(2),
+                Tap(18),
+                Tap(18),
+                Tap(8),
+                Tap(27),
+                Tap(31),
                 Hold(33),
-                Tap {
-                    pos: 1,
-                    for_char: true,
-                },
-                Tap {
-                    pos: 8,
-                    for_char: true,
-                },
-                Tap {
-                    pos: 3,
-                    for_char: true,
-                },
-                Tap {
-                    pos: 18,
-                    for_char: true,
-                },
-                Tap {
-                    pos: 12,
-                    for_char: true,
-                },
+                Tap(1),
+                Tap(8),
+                Tap(3),
+                Tap(18),
+                Tap(12),
                 Release(33),
                 Hold(32),
-                Tap {
-                    pos: 19,
-                    for_char: true,
-                },
+                Tap(19),
                 Release(32),
-                Tap {
-                    pos: 31,
-                    for_char: true,
-                },
+                Tap(31),
                 Hold(32),
-                Tap {
-                    pos: 12,
-                    for_char: true,
-                },
-                Tap {
-                    pos: 21,
-                    for_char: true,
-                },
+                Tap(12),
+                Tap(21),
                 Release(32),
                 Hold(30),
-                Tap {
-                    pos: 16,
-                    for_char: true,
-                },
+                Tap(16),
                 Release(30),
                 Hold(32),
-                Tap {
-                    pos: 13,
-                    for_char: true,
-                },
+                Tap(13),
                 Release(32),
             ]
         };
@@ -1685,98 +1625,32 @@ mod tests {
         let expected = {
             use TypingEvent::*;
             vec![
-                Tap {
-                    pos: 33,
-                    for_char: false,
-                },
-                Tap {
-                    pos: 15,
-                    for_char: true,
-                },
-                Tap {
-                    pos: 2,
-                    for_char: true,
-                },
-                Tap {
-                    pos: 18,
-                    for_char: true,
-                },
-                Tap {
-                    pos: 18,
-                    for_char: true,
-                },
-                Tap {
-                    pos: 8,
-                    for_char: true,
-                },
-                Tap {
-                    pos: 27,
-                    for_char: true,
-                },
-                Tap {
-                    pos: 31,
-                    for_char: true,
-                },
+                Tap(33),
+                Tap(15),
+                Tap(2),
+                Tap(18),
+                Tap(18),
+                Tap(8),
+                Tap(27),
+                Tap(31),
                 Hold(33),
-                Tap {
-                    pos: 1,
-                    for_char: true,
-                },
-                Tap {
-                    pos: 8,
-                    for_char: true,
-                },
-                Tap {
-                    pos: 3,
-                    for_char: true,
-                },
-                Tap {
-                    pos: 18,
-                    for_char: true,
-                },
-                Tap {
-                    pos: 12,
-                    for_char: true,
-                },
+                Tap(1),
+                Tap(8),
+                Tap(3),
+                Tap(18),
+                Tap(12),
                 Release(33),
-                Tap {
-                    pos: 32,
-                    for_char: false,
-                },
-                Tap {
-                    pos: 19,
-                    for_char: true,
-                },
-                Tap {
-                    pos: 31,
-                    for_char: true,
-                },
+                Tap(32),
+                Tap(19),
+                Tap(31),
                 Hold(32),
-                Tap {
-                    pos: 12,
-                    for_char: true,
-                },
-                Tap {
-                    pos: 21,
-                    for_char: true,
-                },
+                Tap(12),
+                Tap(21),
                 Release(32),
-                Tap {
-                    pos: 30,
-                    for_char: false,
-                },
-                Tap {
-                    pos: 16,
-                    for_char: true,
-                },
-                Tap {
-                    pos: 32,
-                    for_char: false,
-                },
-                Tap {
-                    pos: 13,
-                    for_char: true,
-                },
+                Tap(30),
+                Tap(16),
+                Tap(32),
+                Tap(13),
             ]
         };
 

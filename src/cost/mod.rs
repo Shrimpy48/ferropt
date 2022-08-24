@@ -5,7 +5,7 @@ pub mod measured;
 pub mod simple;
 
 pub trait CostModel {
-    fn cost_of_typing(&self, keys: impl Iterator<Item = TypingEvent>) -> (f64, u64);
+    fn cost_of_typing(&self, keys: impl Iterator<Item = TypingEvent>) -> f64;
 
     fn layout_cost(&self, layout: &AnnotatedLayout) -> f64;
 
@@ -15,7 +15,7 @@ pub trait CostModel {
 
         let events = oneshot(keys(layout, string.iter().copied()));
 
-        self.cost_of_typing(events)
+        (self.cost_of_typing(events), string.len() as u64)
     }
 
     fn cost(&self, corpus: &[Vec<Win1252Char>], layout: &AnnotatedLayout) -> f64 {
@@ -33,7 +33,7 @@ pub trait CostModel {
 }
 
 impl<M: CostModel + ?Sized> CostModel for &M {
-    fn cost_of_typing(&self, keys: impl Iterator<Item = TypingEvent>) -> (f64, u64) {
+    fn cost_of_typing(&self, keys: impl Iterator<Item = TypingEvent>) -> f64 {
         (*self).cost_of_typing(keys)
     }
 

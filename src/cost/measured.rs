@@ -122,9 +122,7 @@ impl Model {
         last_used: &mut EnumMap<Digit, LastUsedEntry>,
         held: &ArrayVec<u8, 10>,
         cost: &mut f64,
-        count: &mut u64,
         pos: u8,
-        for_char: bool,
     ) {
         let digit = self.digit_for_pos[pos];
         match last_used[digit].state {
@@ -142,9 +140,6 @@ impl Model {
             *cost += self.cost_of_holding[h][pos];
         }
         last_used[digit].state = DigitState::LastPressedAt(at);
-        if for_char {
-            *count += 1;
-        }
     }
 
     fn handle_hold(
@@ -153,10 +148,9 @@ impl Model {
         last_used: &mut EnumMap<Digit, LastUsedEntry>,
         held: &mut ArrayVec<u8, 10>,
         cost: &mut f64,
-        count: &mut u64,
         pos: u8,
     ) {
-        self.handle_tap(at, last_used, held, cost, count, pos, false);
+        self.handle_tap(at, last_used, held, cost, pos);
         held.push(pos);
     }
 
@@ -181,32 +175,23 @@ impl Model {
 }
 
 impl CostModel for Model {
-    fn cost_of_typing(&self, keys: impl Iterator<Item = TypingEvent>) -> (f64, u64) {
+    fn cost_of_typing(&self, keys: impl Iterator<Item = TypingEvent>) -> f64 {
         let mut last_used = gen_last_used();
         let mut held = ArrayVec::new();
 
         let mut cost = 0.;
-        let mut count = 0;
 
         for (i, event) in keys.enumerate() {
             match event {
-                TypingEvent::Tap { pos, for_char } => self.handle_tap(
-                    i,
-                    &mut last_used,
-                    &held,
-                    &mut cost,
-                    &mut count,
-                    pos,
-                    for_char,
-                ),
+                TypingEvent::Tap(pos) => self.handle_tap(i, &mut last_used, &held, &mut cost, pos),
                 TypingEvent::Unknown => {}
                 TypingEvent::Hold(pos) => {
-                    self.handle_hold(i, &mut last_used, &mut held, &mut cost, &mut count, pos)
+                    self.handle_hold(i, &mut last_used, &mut held, &mut cost, pos)
                 }
                 TypingEvent::Release(pos) => self.handle_release(i, &mut last_used, &mut held, pos),
             }
         }
-        (cost, count)
+        cost
     }
 
     fn layout_cost(&self, layout: &AnnotatedLayout) -> f64 {

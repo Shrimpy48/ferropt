@@ -15,7 +15,7 @@ impl Default for Model {
 }
 
 impl CostModel for Model {
-    fn cost_of_typing(&self, keys: impl Iterator<Item = TypingEvent>) -> (f64, u64) {
+    fn cost_of_typing(&self, keys: impl Iterator<Item = TypingEvent>) -> f64 {
         let mut last_used = enum_map! {
             Digit::LeftPinky => LastUsedEntry {
                 at: None,
@@ -69,11 +69,10 @@ impl CostModel for Model {
             },
         };
 
-        let mut count = 0;
         let mut total_cost = 0;
         for (i, event) in (1u64..).zip(keys) {
             match event {
-                TypingEvent::Tap { pos, for_char } => {
+                TypingEvent::Tap(pos) => {
                     let r = pos / 10;
                     let c = pos % 10;
                     let digit = finger_for_pos(r, c);
@@ -90,14 +89,11 @@ impl CostModel for Model {
                     last_used[digit].at = NonZeroU64::new(i);
                     last_used[digit].row = r;
                     last_used[digit].col = c;
-                    if for_char {
-                        count += 1;
-                    }
                 }
                 _ => {}
             }
         }
-        (total_cost as f64, count)
+        total_cost as f64
     }
 
     fn layout_cost(&self, _layout: &AnnotatedLayout) -> f64 {
