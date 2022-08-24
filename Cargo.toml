@@ -38,7 +38,7 @@ rayon = "1.5"
 regex = "1.5.6"
 lazy_static = "1.4.0"
 # sprog = { path = "../sprog" }
-indicatif = { version = "0.16.2", features = ["with_rayon"] }
+indicatif = { version = "0.17.0", features = ["improved_unicode"] }
 enum-map = "2.4.0"
 dhat = { version = "0.3.0", optional = true }
 clap = { version = "3.2.16", features = ["derive"] }

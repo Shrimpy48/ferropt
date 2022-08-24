@@ -3,6 +3,7 @@ use ferropt::cost::measured::Model;
 use ferropt::layout::*;
 
 use clap::Parser;
+use indicatif::ProgressStyle;
 use indicatif::{HumanDuration, MultiProgress, ProgressBar};
 use rayon::iter;
 use rayon::prelude::*;
@@ -75,40 +76,62 @@ fn run_trials(args: &Args, corpus: &[Vec<Win1252Char>], layout: &Layout) -> (Lay
             })
             .collect()
     } else {
-        let multiprog = MultiProgress::new();
-        multiprog.set_move_cursor(true);
+        // let multiprog = MultiProgress::new();
+        // multiprog.set_move_cursor(true);
 
-        let bars: Vec<_> =
-            std::iter::repeat_with(|| multiprog.add(ProgressBar::new(args.iterations.into())))
-                .take(trials)
-                .collect();
+        // let bars: Vec<_> =
+        //     std::iter::repeat_with(|| multiprog.add(ProgressBar::new(args.iterations.into())))
+        //         .take(trials)
+        //         .collect();
 
-        for bar in bars.iter() {
-            bar.set_position(0);
-        }
+        // for bar in bars.iter() {
+        //     bar.set_style(ProgressStyle::with_template("{wide_bar} {percent:>3}%").unwrap());
+        //     bar.set_position(0);
+        // }
 
-        rayon::join(
-            || multiprog.join_and_clear().unwrap(),
-            || {
-                iter::repeatn(layout, trials)
-                    .zip(bars)
-                    .map(|(l, bar)| {
-                        let res = optimise(
-                            &cost_model,
-                            args.iterations,
-                            args.cooling_rate,
-                            args.temp_scale,
-                            l.clone(),
-                            corpus,
-                            |i| bar.set_position(i.into()),
-                        );
-                        bar.finish();
-                        res
-                    })
-                    .collect()
-            },
-        )
-        .1
+        // rayon::join(
+        //     || multiprog.clear().unwrap(),
+        //     || {
+        //         iter::repeatn(layout, trials)
+        //             .zip(bars)
+        //             .map(|(l, bar)| {
+        //                 let res = optimise(
+        //                     &cost_model,
+        //                     args.iterations,
+        //                     args.cooling_rate,
+        //                     args.temp_scale,
+        //                     l.clone(),
+        //                     corpus,
+        //                     |i| bar.set_position(i.into()),
+        //                 );
+        //                 bar.finish();
+        //                 res
+        //             })
+        //             .collect()
+        //     },
+        // )
+        // .1
+
+        let bar = ProgressBar::new(args.iterations as u64 * trials as u64)
+            .with_style(ProgressStyle::with_template("{percent:>3}% {wide_bar} {eta:>3}").unwrap());
+
+        let res = iter::repeatn(layout, trials)
+            .map(|l| {
+                optimise(
+                    &cost_model,
+                    args.iterations,
+                    args.cooling_rate,
+                    args.temp_scale,
+                    l.clone(),
+                    corpus,
+                    |_i| bar.inc(1),
+                )
+            })
+            .collect();
+
+        bar.finish_and_clear();
+
+        res
     };
 
     // let mut bar = ProgressBar::new(n.into());

@@ -21,20 +21,31 @@ enum PinnedTo {
     Position,
 }
 
+// WARNING: number layout switching does NOT respect pinning.
 fn pinned(layout: &AnnotatedLayout, layer: u8, pos: u8) -> Option<PinnedTo> {
-    if PINNED_KEYS.contains(&(layer, pos)) {
+    let out = if PINNED_KEYS.contains(&(layer, pos)) {
         Some(PinnedTo::Position)
     } else if matches!(layout.layout()[layer][pos], Key::Layer(_) | Key::Shift) {
         Some(PinnedTo::Layer)
     } else if let Some(c) = layout.layout()[layer][pos].typed_char(false) {
         if LOWER_ALPHA.contains(&c) || UPPER_ALPHA.contains(&c) {
-            Some(PinnedTo::Layer)
+            Some(PinnedTo::Position)
         } else {
             None
         }
     } else {
         None
+    };
+
+    if layout.num_layers() == 1 {
+        if out == Some(PinnedTo::Layer) {
+            return None;
+        }
+        if out == Some(PinnedTo::Key) {
+            return Some(PinnedTo::Position);
+        }
     }
+    out
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -58,7 +69,8 @@ enum Mutation {
 }
 
 impl Mutation {
-    fn gen<R: Rng>(mut rng: R, layout: &AnnotatedLayout) -> Self {
+    fn gen_impl<R: Rng>(rng: &mut R, layout: &AnnotatedLayout) -> Self {
+        let mut i = 0;
         let (layer_a, pos_a, a_pinned_to) = loop {
             let layer = rng.gen_range(0..layout.num_layers());
             let pos = rng.gen_range(0..NUM_KEYS);
@@ -66,16 +78,25 @@ impl Mutation {
             if pinned_to != Some(PinnedTo::Position) {
                 break (layer, pos, pinned_to);
             }
+            i += 1;
+            if i > 1000 {
+                panic!("stuck picking A");
+            }
         };
         let is_digit = layout.layout()[layer_a][pos_a]
             .typed_char(false)
             .map(|c| NUMBERS.contains(&c))
             .unwrap_or(false);
         if is_digit {
+            let mut i = 0;
             let layout_b = loop {
                 let layout_b = rng.gen_range(0..NUM_LAYOUTS.len() as u8);
                 if layout_b != layout.num_layout() {
                     break layout_b;
+                }
+                i += 1;
+                if i > 1000 {
+                    panic!("stuck picking num layout");
                 }
             };
             Self::SwapNumLayout {
@@ -85,6 +106,7 @@ impl Mutation {
         } else {
             match a_pinned_to {
                 Some(PinnedTo::Layer) => {
+                    let mut i = 0;
                     let pos_b = loop {
                         let pos = rng.gen_range(0..NUM_KEYS);
                         let is_digit = layout.layout()[layer_a][pos]
@@ -95,9 +117,12 @@ impl Mutation {
                             pinned(layout, layer_a, pos),
                             Some(PinnedTo::Key | PinnedTo::Position)
                         ) && !is_digit
-                            && layout.layout()[layer_a][pos] != layout.layout()[layer_a][pos_a]
                         {
                             break pos;
+                        }
+                        i += 1;
+                        if i > 1000 {
+                            panic!("stuck picking B on same layer");
                         }
                     };
                     Self::SwapKeys {
@@ -108,6 +133,7 @@ impl Mutation {
                     }
                 }
                 Some(PinnedTo::Key) => {
+                    let mut i = 0;
                     let layer_b = loop {
                         let layer = rng.gen_range(0..layout.num_layers());
                         let is_digit = layout.layout()[layer][pos_a]
@@ -118,9 +144,12 @@ impl Mutation {
                             pinned(layout, layer, pos_a),
                             Some(PinnedTo::Layer | PinnedTo::Position)
                         ) && !is_digit
-                            && layout.layout()[layer][pos_a] != layout.layout()[layer_a][pos_a]
                         {
                             break layer;
+                        }
+                        i += 1;
+                        if i > 1000 {
+                            panic!("stuck picking B on same key");
                         }
                     };
                     Self::SwapKeys {
@@ -132,6 +161,7 @@ impl Mutation {
                 }
                 Some(PinnedTo::Position) => unreachable!(),
                 None => {
+                    let mut i = 0;
                     let (layer_b, pos_b) = loop {
                         let layer = rng.gen_range(0..layout.num_layers());
                         let pos = rng.gen_range(0..NUM_KEYS);
@@ -139,11 +169,12 @@ impl Mutation {
                             .typed_char(false)
                             .map(|c| NUMBERS.contains(&c))
                             .unwrap_or(false);
-                        if pinned(layout, layer, pos).is_none()
-                            && !is_digit
-                            && layout.layout()[layer][pos] != layout.layout()[layer_a][pos_a]
-                        {
+                        if pinned(layout, layer, pos).is_none() && !is_digit {
                             break (layer, pos);
+                        }
+                        i += 1;
+                        if i > 1000 {
+                            panic!("stuck picking B");
                         }
                     };
                     Self::SwapKeys {
@@ -151,6 +182,52 @@ impl Mutation {
                         layer_b,
                         pos_a,
                         pos_b,
+                    }
+                }
+            }
+        }
+    }
+
+    fn gen<R: Rng>(rng: &mut R, layout: &AnnotatedLayout) -> Self {
+        loop {
+            let change = Self::gen_impl(rng, layout);
+            match change {
+                Self::SwapNumLayout { layout_a, layout_b } => {
+                    if layout_a != layout_b {
+                        break change;
+                    }
+                }
+                Self::SwapKeys {
+                    layer_a,
+                    pos_a,
+                    layer_b,
+                    pos_b,
+                } => {
+                    #[cfg(debug_assertions)]
+                    {
+                        if layer_a != layer_b {
+                            assert!(!matches!(
+                                pinned(layout, layer_a, pos_a),
+                                Some(PinnedTo::Layer | PinnedTo::Position)
+                            ));
+                            assert!(!matches!(
+                                pinned(layout, layer_b, pos_b),
+                                Some(PinnedTo::Layer | PinnedTo::Position)
+                            ));
+                        }
+                        if pos_a != pos_b {
+                            assert!(!matches!(
+                                pinned(layout, layer_a, pos_a),
+                                Some(PinnedTo::Key | PinnedTo::Position)
+                            ));
+                            assert!(!matches!(
+                                pinned(layout, layer_b, pos_b),
+                                Some(PinnedTo::Key | PinnedTo::Position)
+                            ));
+                        }
+                    }
+                    if layout.layout()[layer_a][pos_a] != layout.layout()[layer_b][pos_b] {
+                        break change;
                     }
                 }
             }
