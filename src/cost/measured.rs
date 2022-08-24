@@ -1,17 +1,72 @@
 use std::ops::{Add, Div, Mul, Sub};
 
+use arrayvec::ArrayVec;
 use enum_map::{enum_map, EnumMap};
-use lazy_static::lazy_static;
 
 use super::CostModel;
 use crate::layout::{finger_for_pos, AnnotatedLayout, Digit, Finger, Layer, TypingEvent};
 
+use super::heuristic::memorability_cost;
+
 #[derive(Debug, Clone)]
-pub struct Model;
+pub struct Model {
+    digit_for_pos: Layer<Digit>,
+    cost_from_resting: Layer<f64>,
+    cost_from_pos: Layer<Layer<[f64; REPEAT_MAX_T]>>,
+    cost_of_holding: Layer<Layer<f64>>,
+}
+
+impl Model {
+    pub fn new() -> Self {
+        Self {
+            digit_for_pos: Layer::from_fun(|pos| {
+                let r = pos / 10;
+                let c = pos % 10;
+                finger_for_pos(r, c)
+            }),
+            cost_from_resting: Layer::from_fun(|pos| {
+                let r = pos / 10;
+                let c = pos % 10;
+                let digit = finger_for_pos(r, c);
+                cost_from_resting(digit, (r, c))
+            }),
+            cost_from_pos: Layer::from_fun(|from_pos| {
+                let from_r = from_pos / 10;
+                let from_c = from_pos % 10;
+                let digit = finger_for_pos(from_r, from_c);
+                Layer::from_fun(|to_pos| {
+                    let to_r = to_pos / 10;
+                    let to_c = to_pos % 10;
+                    let mut out = [0.; REPEAT_MAX_T];
+                    for (after, cost) in (0..).zip(out.iter_mut()) {
+                        *cost = cost_from_pos(digit, after, (from_r, from_c), (to_r, to_c));
+                    }
+                    out
+                })
+            }),
+            cost_of_holding: Layer::from_fun(|held_pos| {
+                let held_r = held_pos / 10;
+                let held_c = held_pos % 10;
+                let held_digit = finger_for_pos(held_r, held_c);
+                Layer::from_fun(|pressed_pos| {
+                    let pressed_r = pressed_pos / 10;
+                    let pressed_c = pressed_pos % 10;
+                    let pressed_digit = finger_for_pos(pressed_r, pressed_c);
+                    cost_of_holding(
+                        held_digit,
+                        (held_r, held_c),
+                        pressed_digit,
+                        (pressed_r, pressed_c),
+                    )
+                })
+            }),
+        }
+    }
+}
 
 impl Default for Model {
     fn default() -> Self {
-        Self
+        Self::new()
     }
 }
 
@@ -60,96 +115,109 @@ fn gen_last_used() -> EnumMap<Digit, LastUsedEntry> {
     }
 }
 
-fn handle_tap(
-    last_used: &mut EnumMap<Digit, LastUsedEntry>,
-    cost: &mut f64,
-    count: &mut u64,
-    pos: u8,
-    for_char: bool,
-) {
-    let digit = DIGIT_FOR_POS[pos];
-    match last_used[digit].state {
-        DigitState::LastPressed(after) => {
-            *cost += COST_FROM_POS[last_used[digit].pos][pos][after as usize]
-        }
-        _ => *cost += COST_FROM_RESTING[pos],
-    }
-    advance_counters_etc(last_used, cost, pos);
-    if !matches!(last_used[digit].state, DigitState::Held) {
-        last_used[digit].state = DigitState::LastPressed(0);
-    }
-    if for_char {
-        *count += 1;
-    }
-}
-
-fn advance_counters_etc(last_used: &mut EnumMap<Digit, LastUsedEntry>, cost: &mut f64, pos: u8) {
-    for e in last_used.values_mut() {
-        match e.state {
-            DigitState::Held => *cost += COST_OF_HOLDING[e.pos][pos],
-            DigitState::LastPressed(ref mut after) => {
-                *after += 1;
-                if *after as usize >= REPEAT_MAX_T {
-                    e.state = DigitState::Unpressed;
+impl Model {
+    fn handle_tap(
+        &self,
+        at: usize,
+        last_used: &mut EnumMap<Digit, LastUsedEntry>,
+        held: &ArrayVec<u8, 10>,
+        cost: &mut f64,
+        count: &mut u64,
+        pos: u8,
+        for_char: bool,
+    ) {
+        let digit = self.digit_for_pos[pos];
+        match last_used[digit].state {
+            DigitState::LastPressedAt(t) => {
+                let elapsed = at - t - 1;
+                if elapsed < REPEAT_MAX_T {
+                    *cost += self.cost_from_pos[last_used[digit].pos][pos][elapsed];
+                } else {
+                    *cost += self.cost_from_resting[pos];
                 }
             }
-            DigitState::Unpressed => {}
+            _ => *cost += self.cost_from_resting[pos],
+        }
+        for &h in held {
+            *cost += self.cost_of_holding[h][pos];
+        }
+        last_used[digit].state = DigitState::LastPressedAt(at);
+        if for_char {
+            *count += 1;
         }
     }
-}
 
-fn handle_hold(
-    last_used: &mut EnumMap<Digit, LastUsedEntry>,
-    cost: &mut f64,
-    count: &mut u64,
-    pos: u8,
-) {
-    handle_tap(last_used, cost, count, pos, false);
-    let digit = DIGIT_FOR_POS[pos];
-    last_used[digit] = LastUsedEntry {
-        state: DigitState::Held,
-        pos,
-    };
-}
+    fn handle_hold(
+        &self,
+        at: usize,
+        last_used: &mut EnumMap<Digit, LastUsedEntry>,
+        held: &mut ArrayVec<u8, 10>,
+        cost: &mut f64,
+        count: &mut u64,
+        pos: u8,
+    ) {
+        self.handle_tap(at, last_used, held, cost, count, pos, false);
+        held.push(pos);
+    }
 
-fn handle_release(last_used: &mut EnumMap<Digit, LastUsedEntry>, pos: u8) {
-    let digit = DIGIT_FOR_POS[pos];
-    last_used[digit] = LastUsedEntry {
-        state: DigitState::LastPressed(0),
-        pos,
-    };
+    fn handle_release(
+        &self,
+        at: usize,
+        last_used: &mut EnumMap<Digit, LastUsedEntry>,
+        held: &mut ArrayVec<u8, 10>,
+        pos: u8,
+    ) {
+        let digit = self.digit_for_pos[pos];
+        last_used[digit] = LastUsedEntry {
+            state: DigitState::LastPressedAt(at),
+            pos,
+        };
+        let idx = held
+            .iter()
+            .position(|&p| p == pos)
+            .expect("key released but not held");
+        held.swap_remove(idx);
+    }
 }
 
 impl CostModel for Model {
     fn cost_of_typing(&self, keys: impl Iterator<Item = TypingEvent>) -> (f64, u64) {
         let mut last_used = gen_last_used();
+        let mut held = ArrayVec::new();
 
         let mut cost = 0.;
         let mut count = 0;
 
-        for event in keys {
+        for (i, event) in keys.enumerate() {
             match event {
-                TypingEvent::Tap { pos, for_char } => {
-                    handle_tap(&mut last_used, &mut cost, &mut count, pos, for_char)
-                }
+                TypingEvent::Tap { pos, for_char } => self.handle_tap(
+                    i,
+                    &mut last_used,
+                    &held,
+                    &mut cost,
+                    &mut count,
+                    pos,
+                    for_char,
+                ),
                 TypingEvent::Unknown => {}
-                TypingEvent::Hold(pos) => handle_hold(&mut last_used, &mut cost, &mut count, pos),
-                TypingEvent::Release(pos) => handle_release(&mut last_used, pos),
+                TypingEvent::Hold(pos) => {
+                    self.handle_hold(i, &mut last_used, &mut held, &mut cost, &mut count, pos)
+                }
+                TypingEvent::Release(pos) => self.handle_release(i, &mut last_used, &mut held, pos),
             }
         }
         (cost, count)
     }
 
-    fn layout_cost(&self, _layout: &AnnotatedLayout) -> f64 {
-        0.
+    fn layout_cost(&self, layout: &AnnotatedLayout) -> f64 {
+        6. * memorability_cost(layout)
     }
 }
 
 #[derive(Debug, Clone, Copy)]
 enum DigitState {
     Unpressed,
-    Held,
-    LastPressed(u8),
+    LastPressedAt(usize),
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -256,25 +324,25 @@ fn resting_location(digit: Digit) -> (u8, u8) {
 const HORIZ_SEP: Millimetre = Millimetre(18);
 const VERT_SEP: Millimetre = Millimetre(17);
 
-lazy_static! {
-    static ref RESTING_OFFSET: EnumMap<Finger, Millimetre> = enum_map! {
+fn resting_offset(finger: Finger) -> Millimetre {
+    match finger {
         Finger::Pinky => Millimetre(-4),
         Finger::Ring => Millimetre(2),
         Finger::Middle => Millimetre(1),
         Finger::Index => Millimetre(-2),
         Finger::Thumb => Millimetre(0),
-    };
+    }
 }
 
 fn dist_from_resting(digit: Digit, (row, col): (u8, u8)) -> (Millimetre, Millimetre) {
     let (rest_row, rest_col) = resting_location(digit);
     let vert_dist = match row.cmp(&rest_row) {
         std::cmp::Ordering::Less => {
-            (rest_row - row) as i16 * VERT_SEP - RESTING_OFFSET[digit.finger()]
+            (rest_row - row) as i16 * VERT_SEP - resting_offset(digit.finger())
         }
         std::cmp::Ordering::Equal => Millimetre(0),
         std::cmp::Ordering::Greater => {
-            (row - rest_row) as i16 * VERT_SEP + RESTING_OFFSET[digit.finger()]
+            (row - rest_row) as i16 * VERT_SEP + resting_offset(digit.finger())
         }
     };
     let horiz_dist = match col.cmp(&rest_col) {
@@ -334,48 +402,4 @@ fn cost_of_holding(
     } else {
         finger_strength_cost(held.finger()) * (HOLD_COST + HOLD_SAME_HAND_COST)
     }
-}
-
-lazy_static! {
-    static ref DIGIT_FOR_POS: Layer<Digit> = Layer::from_fun(|pos| {
-        let r = pos / 10;
-        let c = pos % 10;
-        finger_for_pos(r, c)
-    });
-    static ref COST_FROM_RESTING: Layer<f64> = Layer::from_fun(|pos| {
-        let r = pos / 10;
-        let c = pos % 10;
-        let digit = finger_for_pos(r, c);
-        cost_from_resting(digit, (r, c))
-    });
-    static ref COST_FROM_POS: Layer<Layer<[f64; REPEAT_MAX_T]>> = Layer::from_fun(|from_pos| {
-        let from_r = from_pos / 10;
-        let from_c = from_pos % 10;
-        let digit = finger_for_pos(from_r, from_c);
-        Layer::from_fun(|to_pos| {
-            let to_r = to_pos / 10;
-            let to_c = to_pos % 10;
-            let mut out = [0.; REPEAT_MAX_T];
-            for (after, cost) in (0..).zip(out.iter_mut()) {
-                *cost = cost_from_pos(digit, after, (from_r, from_c), (to_r, to_c));
-            }
-            out
-        })
-    });
-    static ref COST_OF_HOLDING: Layer<Layer<f64>> = Layer::from_fun(|held_pos| {
-        let held_r = held_pos / 10;
-        let held_c = held_pos % 10;
-        let held_digit = finger_for_pos(held_r, held_c);
-        Layer::from_fun(|pressed_pos| {
-            let pressed_r = pressed_pos / 10;
-            let pressed_c = pressed_pos % 10;
-            let pressed_digit = finger_for_pos(pressed_r, pressed_c);
-            cost_of_holding(
-                held_digit,
-                (held_r, held_c),
-                pressed_digit,
-                (pressed_r, pressed_c),
-            )
-        })
-    });
 }

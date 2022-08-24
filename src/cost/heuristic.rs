@@ -300,7 +300,7 @@ lazy_static! {
 // fn memorability_cost(_layout: &Layout, char_idx: &CharIdx) -> f64 {
 //     0.
 // }
-fn memorability_cost(layout: &AnnotatedLayout) -> f64 {
+pub(super) fn memorability_cost(layout: &AnnotatedLayout) -> f64 {
     let ordered_pair_penalty: f64 = ORDERED_PAIRS
         .into_iter()
         .filter_map(|[l, r]| {
