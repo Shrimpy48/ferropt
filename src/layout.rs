@@ -133,6 +133,7 @@ pub enum KeyCode {
     Equals,
     Space,
     Enter,
+    Tab,
 }
 
 lazy_static! {
@@ -186,6 +187,7 @@ lazy_static! {
     static ref EQUALS: Win1252Char = "=".try_into().unwrap();
     pub static ref SPACE: Win1252Char = " ".try_into().unwrap();
     pub static ref ENTER: Win1252Char = "\n".try_into().unwrap();
+    pub static ref TAB: Win1252Char = "\t".try_into().unwrap();
 }
 lazy_static! {
     static ref SHIFT_A: Win1252Char = "A".try_into().unwrap();
@@ -238,6 +240,7 @@ lazy_static! {
     static ref SHIFT_EQUALS: Win1252Char = "+".try_into().unwrap();
     static ref SHIFT_SPACE: Win1252Char = " ".try_into().unwrap();
     static ref SHIFT_ENTER: Win1252Char = "\n".try_into().unwrap();
+    static ref SHIFT_TAB: Win1252Char = "\t".try_into().unwrap();
 }
 
 impl KeyCode {
@@ -293,6 +296,7 @@ impl KeyCode {
             Self::Equals => *EQUALS,
             Self::Space => *SPACE,
             Self::Enter => *ENTER,
+            Self::Tab => *TAB,
         }
     }
 
@@ -348,6 +352,7 @@ impl KeyCode {
             Self::Equals => *SHIFT_EQUALS,
             Self::Space => *SHIFT_SPACE,
             Self::Enter => *SHIFT_ENTER,
+            Self::Tab => *SHIFT_TAB,
         }
     }
 }
@@ -405,6 +410,7 @@ impl fmt::Display for KeyCode {
             Self::Equals => write!(f, "KC_EQL"),
             Self::Space => write!(f, "KC_SPC"),
             Self::Enter => write!(f, "KC_ENT"),
+            Self::Tab => write!(f, "KC_TAB"),
         }
     }
 }
@@ -464,6 +470,7 @@ impl FromStr for KeyCode {
             "KC_EQL" => Ok(Self::Equals),
             "KC_SPC" => Ok(Self::Space),
             "KC_ENT" => Ok(Self::Enter),
+            "KC_TAB" => Ok(Self::Tab),
             _ => Err(ParseError::UnknownValue(s.to_string())),
         }
     }
