@@ -1490,22 +1490,26 @@ impl From<Layout> for AnnotatedLayout {
             .zip(layout[0].iter())
             .find_map(|(i, k)| matches!(k, Key::Shift).then_some(i));
 
-        let num_layer = char_idx[NUMBERS[0]].unwrap().layer;
-
-        let num_layout = NUM_LAYOUTS
-            .iter()
-            .position(|&l| {
-                NUMBERS
+        let (num_layer, num_layout) = match char_idx[NUMBERS[0]].map(|e| e.layer) {
+            Some(num_layer) => {
+                let num_layout = NUM_LAYOUTS
                     .iter()
-                    .map(|&c| {
-                        let entry = char_idx[c].unwrap();
-                        assert_eq!(entry.layer, num_layer);
-                        entry.pos
+                    .position(|&l| {
+                        NUMBERS
+                            .iter()
+                            .map(|&c| {
+                                let entry = char_idx[c].unwrap();
+                                assert_eq!(entry.layer, num_layer);
+                                entry.pos
+                            })
+                            .zip(l)
+                            .all(|(actual, desired)| actual == desired)
                     })
-                    .zip(l)
-                    .all(|(actual, desired)| actual == desired)
-            })
-            .unwrap() as u8;
+                    .unwrap() as u8;
+                (num_layer, num_layout)
+            }
+            None => (0, 0),
+        };
 
         Self {
             layout,

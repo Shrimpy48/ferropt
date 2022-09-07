@@ -93,7 +93,9 @@ impl CostModel for Model {
                 _ => {}
             }
         }
-        total_cost as f64
+        let cost = total_cost as f64;
+        debug_assert!(cost.is_finite());
+        cost
     }
 
     fn layout_cost(&self, _layout: &AnnotatedLayout) -> f64 {

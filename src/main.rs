@@ -152,6 +152,10 @@ fn run_trials(args: &Args, corpus: &[Vec<Win1252Char>], layout: &Layout) -> (Lay
         .sum::<u32>() as f64
         / (trials * trials) as f64;
 
+    if !args.quiet {
+        graph(80, &results);
+    }
+
     let best = results
         .into_iter()
         .max_by(|(_, a), (_, b)| a.total_cmp(b))
@@ -159,7 +163,7 @@ fn run_trials(args: &Args, corpus: &[Vec<Win1252Char>], layout: &Layout) -> (Lay
 
     if !args.quiet {
         eprintln!(
-            "layout MD = {:6.2}, mean = {:6.3}, std dev = {:5.3}, best = {:6.3} in {}",
+            "layout MD = {:6.2}, mean improvement = {:5.2}%, std dev = {:5.2}%, best = {:5.2}% in {}",
             mad,
             mean,
             std_dev,
@@ -169,4 +173,30 @@ fn run_trials(args: &Args, corpus: &[Vec<Win1252Char>], layout: &Layout) -> (Lay
     }
 
     best
+}
+
+fn graph(width: usize, results: &[(Layout, f64)]) {
+    assert!(width > 0);
+    let (lower, upper) = results
+        .iter()
+        .fold((f64::INFINITY, f64::NEG_INFINITY), |(l, h), (_, b)| {
+            (l.min(*b), h.max(*b))
+        });
+    let mut buckets = vec![0; width];
+    for v in results.iter().map(|(_, v)| *v) {
+        let pos = (v - lower) * (width - 1) as f64 / (upper - lower);
+        let idx = pos.round() as usize;
+        buckets[idx] += 1;
+    }
+    let height = buckets.iter().copied().max().unwrap();
+    for y in (1..=height).rev() {
+        for count in buckets.iter().copied() {
+            if count >= y {
+                print!("*");
+            } else {
+                print!(" ");
+            }
+        }
+        println!();
+    }
 }

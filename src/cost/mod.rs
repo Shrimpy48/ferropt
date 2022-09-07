@@ -19,16 +19,14 @@ pub trait CostModel {
     }
 
     fn cost(&self, corpus: &[Vec<Win1252Char>], layout: &AnnotatedLayout) -> f64 {
-        let (t, c) = corpus
+        let (total, count) = corpus
             .iter()
             .map(|s| self.string_cost(layout, s))
-            .fold((0., 0), |(a0, a1), (b0, b1)| (a0 + b0, a1 + b1));
-        // let (t, c) = corpus
-        //     .par_iter()
-        //     .map(|s| string_cost(&char_idx, layer_idx, next_key_cost, held_key_cost, s))
-        //     .reduce(|| (0, 0), |(a0, a1), (b0, b1)| (a0 + b0, a1 + b1));
+            .fold((0., 0), |a, b| (a.0 + b.0, a.1 + b.1));
+        debug_assert!(total.is_finite());
 
-        t / c as f64 + self.layout_cost(layout)
+        let typing_cost = total / count as f64;
+        typing_cost + self.layout_cost(layout)
     }
 }
 

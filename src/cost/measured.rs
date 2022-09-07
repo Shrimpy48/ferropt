@@ -191,6 +191,7 @@ impl CostModel for Model {
                 TypingEvent::Release(pos) => self.handle_release(i, &mut last_used, &mut held, pos),
             }
         }
+        debug_assert!(cost.is_finite());
         cost
     }
 

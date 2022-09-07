@@ -266,6 +266,7 @@ impl Mutation {
 const P0: f64 = 1.;
 
 /// Optimise the layout using simulated annealing.
+/// Returns the optimised layout and the percentage cost improvement.
 pub fn optimise<M: CostModel>(
     cost_model: M,
     n: u32,
@@ -300,7 +301,10 @@ pub fn optimise<M: CostModel>(
         // eprintln!("iteration {}, energy = {}", i, energy);
     }
     // eprintln!("improvement: {}", initial_energy - energy);
-    (layout.into(), initial_energy - energy)
+    (
+        layout.into(),
+        100. * (initial_energy - energy) / initial_energy,
+    )
 }
 
 #[cfg(test)]
