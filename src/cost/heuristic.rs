@@ -2,7 +2,7 @@ use lazy_static::lazy_static;
 
 use crate::layout::{
     finger_for_pos, AnnotatedLayout, CharIdx, Finger, Hand, Layer, TypingEvent, Win1252Char, ENTER,
-    LOWER_ALPHA, NUM_KEYS, UPPER_ALPHA,
+    LOWER_ALPHA, NUM_KEYS, TAB, UPPER_ALPHA,
 };
 
 use super::{log_norm, CostModel};
@@ -399,6 +399,10 @@ pub(super) fn memorability_cost(layout: &AnnotatedLayout) -> f64 {
         None | Some(30 | 31 | 32 | 33) => 0.,
         _ => 2.,
     };
+    let tab_penalty = match layout.char_idx()[*TAB].map(|e| e.pos) {
+        None | Some(30 | 31 | 32 | 33) => 0.,
+        _ => 2.,
+    };
     let mut layer_penalty = 0.;
     for l in layout.layer_idx().iter().skip(1) {
         layer_penalty += match l {
@@ -420,6 +424,7 @@ pub(super) fn memorability_cost(layout: &AnnotatedLayout) -> f64 {
         + 0.1 * shift_penalty
         + 0.1 * layer_penalty
         + 0.1 * enter_penalty
+        + 0.1 * tab_penalty
     // + num_layout_penalty(layout)
 }
 
