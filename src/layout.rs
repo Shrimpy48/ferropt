@@ -482,7 +482,7 @@ pub enum Key {
     Shifted(KeyCode),
     Empty,
     Shift,
-    Layer(usize),
+    Layer(u8),
     // Repeat,
 }
 
@@ -1201,6 +1201,142 @@ where
     }
 }
 
+#[derive(Clone, Copy)]
+enum OneshotState<T> {
+    Persistent(T),
+    Oneshot(T),
+}
+
+impl<T> OneshotState<T> {
+    fn current(self) -> T {
+        match self {
+            Self::Persistent(val) => val,
+            Self::Oneshot(val) => val,
+        }
+    }
+
+    fn is_oneshot(self) -> bool {
+        match self {
+            Self::Persistent(_) => false,
+            Self::Oneshot(_) => true,
+        }
+    }
+}
+
+impl<T: Default> Default for OneshotState<T> {
+    fn default() -> Self {
+        Self::Persistent(T::default())
+    }
+}
+
+#[derive(Clone)]
+struct Typist<'l, I> {
+    layout: &'l AnnotatedLayout,
+    events: I,
+    layer_state: OneshotState<u8>,
+    shift_state: OneshotState<bool>,
+}
+
+impl<'l, I> Typist<'l, I> {
+    fn finish_oneshot(&mut self) {
+        if self.layer_state.is_oneshot() {
+            self.layer_state = OneshotState::default();
+        }
+        if self.shift_state.is_oneshot() {
+            self.shift_state = OneshotState::default();
+        }
+    }
+}
+
+impl<'l, I> Iterator for Typist<'l, I>
+where
+    I: Iterator<Item = TypingEvent>,
+{
+    type Item = Win1252Char;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            match self.events.next() {
+                None => return None,
+                Some(TypingEvent::Tap(pos)) => {
+                    let layer = self.layer_state.current();
+                    let shifted = self.shift_state.current();
+
+                    match self.layout.layout()[layer][pos] {
+                        Key::Empty => {
+                            self.finish_oneshot();
+                        }
+                        Key::Layer(layer) => {
+                            self.layer_state = OneshotState::Oneshot(layer);
+                        }
+                        Key::Shift => {
+                            self.shift_state = OneshotState::Oneshot(true);
+                        }
+                        Key::Shifted(kc) => {
+                            self.finish_oneshot();
+                            return Some(kc.shifted_char());
+                        }
+                        Key::Typing(kc) => {
+                            self.finish_oneshot();
+                            return Some(if shifted {
+                                kc.shifted_char()
+                            } else {
+                                kc.typed_char()
+                            });
+                        }
+                    }
+                }
+                Some(TypingEvent::Hold(pos)) => {
+                    let layer = self.layer_state.current();
+
+                    match self.layout.layout()[layer][pos] {
+                        Key::Layer(layer) => {
+                            self.layer_state = OneshotState::Persistent(layer);
+                        }
+                        Key::Shift => {
+                            self.shift_state = OneshotState::Persistent(true);
+                        }
+                        _ => {}
+                    }
+                }
+                Some(TypingEvent::Release(pos)) => {
+                    // Assume that the held key was on the home layer
+                    // and that only one of each type of key is held at once.
+                    match self.layout.layout()[0][pos] {
+                        Key::Layer(layer) => {
+                            self.layer_state = OneshotState::default();
+                        }
+                        Key::Shift => {
+                            self.shift_state = OneshotState::default();
+                        }
+                        _ => {}
+                    }
+                }
+                Some(TypingEvent::Unknown) => self.finish_oneshot(),
+            }
+        }
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        // The resulting iterator cannot be longer than the event iterator
+        // as each event can type at most one character.
+        (0, self.events.size_hint().1)
+    }
+}
+impl<'l, I> FusedIterator for Typist<'l, I> where I: Iterator<Item = TypingEvent> + FusedIterator {}
+
+fn type_events<I>(layout: &AnnotatedLayout, events: I) -> Typist<I::IntoIter>
+where
+    I: IntoIterator<Item = TypingEvent>,
+{
+    Typist {
+        layout,
+        events: events.into_iter(),
+        layer_state: OneshotState::default(),
+        shift_state: OneshotState::default(),
+    }
+}
+
 /// Interpret a String as a Vec of bytes encoded using Windows_1252, where each byte represents one char.
 /// If any of the chars in the String are not encodable, returns None.
 pub fn to_bytes(string: String) -> Option<Vec<Win1252Char>> {
@@ -1337,13 +1473,13 @@ impl AnnotatedLayout {
         }
         if let Key::Layer(layer) = a {
             assert_eq!(layer_a, 0);
-            assert_eq!(self.layer_idx[layer], pos_a);
-            self.layer_idx[layer] = pos_b;
+            assert_eq!(self.layer_idx[layer as usize], pos_a);
+            self.layer_idx[layer as usize] = pos_b;
         }
         if let Key::Layer(layer) = b {
             assert_eq!(layer_b, 0);
-            assert_eq!(self.layer_idx[layer], pos_b);
-            self.layer_idx[layer] = pos_a;
+            assert_eq!(self.layer_idx[layer as usize], pos_b);
+            self.layer_idx[layer as usize] = pos_a;
         }
         if let Key::Shift = a {
             assert_eq!(layer_a, 0);
@@ -1490,7 +1626,7 @@ impl From<Layout> for AnnotatedLayout {
                 _ => None,
             })
             .fold(vec![0; layout.layers.len()], |mut a, (n, j)| {
-                a[n] = j;
+                a[n as usize] = j;
                 a
             });
         let shift_idx = (0..)
@@ -1585,7 +1721,9 @@ pub fn read_named_corpus<P: AsRef<Path>>(path: P) -> io::Result<Vec<(PathBuf, Ve
 
 #[cfg(test)]
 mod tests {
-    use std::fs::File;
+    use std::{fs::File, iter};
+
+    use rand::{prelude::SliceRandom, thread_rng, Rng};
 
     use super::*;
 
@@ -1672,5 +1810,91 @@ mod tests {
         let actual: Vec<_> = oneshot(keys(&layout.into(), to_bytes(string).unwrap())).collect();
 
         assert_eq!(expected, actual);
+    }
+
+    #[test]
+    fn type_helloworld() {
+        let f = File::open("qwerty.json").unwrap();
+        let layout: Layout = serde_json::from_reader(f).unwrap();
+        let events = {
+            use TypingEvent::*;
+            vec![
+                Tap(33),
+                Tap(15),
+                Tap(2),
+                Tap(18),
+                Tap(18),
+                Tap(8),
+                Tap(27),
+                Tap(31),
+                Hold(33),
+                Tap(1),
+                Tap(8),
+                Tap(3),
+                Tap(18),
+                Tap(12),
+                Release(33),
+                Hold(32),
+                Tap(19),
+                Tap(31),
+                Tap(12),
+                Tap(21),
+                Release(32),
+                Tap(30),
+                Tap(16),
+                Tap(32),
+                Tap(13),
+            ]
+        };
+        let expected = to_bytes("Hello, WORLD!\n(~1)".to_owned()).unwrap();
+
+        let actual: Vec<_> = type_events(&layout.into(), events).collect();
+
+        assert_eq!(expected, actual);
+    }
+
+    #[test]
+    fn type_keys() {
+        let mut rng = thread_rng();
+        let f = File::open("qwerty.json").unwrap();
+        let layout: Layout = serde_json::from_reader(f).unwrap();
+        let layout: AnnotatedLayout = layout.into();
+        let available_chars: Vec<_> = layout
+            .char_idx
+            .iter()
+            .filter_map(|(k, v)| v.map(|_| k))
+            .collect();
+
+        let input_len = rng.gen_range(0..65536);
+        let input: Vec<_> = iter::repeat_with(|| *available_chars.choose(&mut rng).unwrap())
+            .take(input_len)
+            .collect();
+
+        let output: Vec<_> = type_events(&layout, keys(&layout, input.iter().copied())).collect();
+
+        assert_eq!(input, output);
+    }
+
+    #[test]
+    fn type_oneshot() {
+        let mut rng = thread_rng();
+        let f = File::open("qwerty.json").unwrap();
+        let layout: Layout = serde_json::from_reader(f).unwrap();
+        let layout: AnnotatedLayout = layout.into();
+        let available_chars: Vec<_> = layout
+            .char_idx
+            .iter()
+            .filter_map(|(k, v)| v.map(|_| k))
+            .collect();
+
+        let input_len = rng.gen_range(0..65536);
+        let input: Vec<_> = iter::repeat_with(|| *available_chars.choose(&mut rng).unwrap())
+            .take(input_len)
+            .collect();
+
+        let output: Vec<_> =
+            type_events(&layout, oneshot(keys(&layout, input.iter().copied()))).collect();
+
+        assert_eq!(input, output);
     }
 }
