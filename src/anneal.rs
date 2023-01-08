@@ -265,9 +265,9 @@ impl Mutation {
 
 const P0: f64 = 1.;
 
-/// Optimise the layout using simulated annealing.
+/// Optimise the layout using simulated annealing with a fixed number of iterations.
 /// Returns the optimised layout and the percentage cost improvement.
-pub fn optimise<M: CostModel>(
+pub fn optimise_fixed<M: CostModel>(
     cost_model: M,
     n: u32,
     k: f64,
@@ -294,6 +294,108 @@ pub fn optimise<M: CostModel>(
                 if !rng.gen_bool(p) {
                     mutation.undo(&mut layout);
                     continue;
+                }
+            }
+        }
+        energy = new_energy;
+        // eprintln!("iteration {}, energy = {}", i, energy);
+    }
+    // eprintln!("improvement: {}", initial_energy - energy);
+    (
+        layout.into(),
+        100. * (initial_energy - energy) / initial_energy,
+    )
+}
+
+/// Optimise the layout using simulated annealing until a local minimum is reached.
+/// Returns the optimised layout and the percentage cost improvement.
+pub fn optimise_until_stable<M: CostModel>(
+    cost_model: M,
+    max_unchanged: u32,
+    hl: f64,
+    temp_scale: f64,
+    layout: Layout,
+    corpus: &[Vec<Win1252Char>],
+) -> (Layout, f64) {
+    let mut layout: AnnotatedLayout = layout.into();
+    let mut rng = thread_rng();
+    let initial_energy = cost_model.cost(corpus, &layout);
+    let t0 = initial_energy * temp_scale;
+    let mut energy = initial_energy;
+    let mut unchanged_count = 0;
+    for i in 0.. {
+        let mutation = Mutation::gen(&mut rng, &layout);
+        mutation.apply(&mut layout);
+        let new_energy = cost_model.cost(corpus, &layout);
+        match new_energy.partial_cmp(&energy).unwrap() {
+            cmp::Ordering::Less | cmp::Ordering::Equal => {
+                unchanged_count = 0;
+            }
+            cmp::Ordering::Greater => {
+                let temperature = t0 * (-i as f64 / hl).exp2();
+                let p = P0 * ((energy - new_energy) / temperature).exp();
+                if !rng.gen_bool(p) {
+                    mutation.undo(&mut layout);
+                    unchanged_count += 1;
+                    if unchanged_count >= max_unchanged {
+                        break;
+                    }
+                    continue;
+                } else {
+                    unchanged_count = 0;
+                }
+            }
+        }
+        energy = new_energy;
+        // eprintln!("iteration {}, energy = {}", i, energy);
+    }
+    // eprintln!("improvement: {}", initial_energy - energy);
+    (
+        layout.into(),
+        100. * (initial_energy - energy) / initial_energy,
+    )
+}
+
+/// Optimise the layout using simulated annealing until a local minimum is reached.
+/// Returns the optimised layout and the percentage cost improvement.
+pub fn optimise_log<M: CostModel>(
+    cost_model: M,
+    max_unchanged: u32,
+    hl: f64,
+    temp_scale: f64,
+    layout: Layout,
+    corpus: &[Vec<Win1252Char>],
+    mut log_writer: impl std::io::Write,
+) -> (Layout, f64) {
+    let mut layout: AnnotatedLayout = layout.into();
+    let mut rng = thread_rng();
+    let initial_energy = cost_model.cost(corpus, &layout);
+    let t0 = initial_energy * temp_scale;
+    let mut energy = initial_energy;
+    let mut unchanged_count = 0;
+    writeln!(log_writer, "iteration,temperature,energy").unwrap();
+    for i in 0.. {
+        let temperature = t0 * (-i as f64 / hl).exp2();
+        // let temperature = t0 * (1. - i as f64 / (hl * 2.)).max(0.);
+        writeln!(log_writer, "{i},{temperature},{energy}").unwrap();
+        let mutation = Mutation::gen(&mut rng, &layout);
+        mutation.apply(&mut layout);
+        let new_energy = cost_model.cost(corpus, &layout);
+        match new_energy.partial_cmp(&energy).unwrap() {
+            cmp::Ordering::Less | cmp::Ordering::Equal => {
+                unchanged_count = 0;
+            }
+            cmp::Ordering::Greater => {
+                let p = P0 * ((energy - new_energy) / temperature).exp();
+                if !rng.gen_bool(p) {
+                    mutation.undo(&mut layout);
+                    unchanged_count += 1;
+                    if unchanged_count >= max_unchanged {
+                        break;
+                    }
+                    continue;
+                } else {
+                    unchanged_count = 0;
                 }
             }
         }

@@ -17,11 +17,13 @@ use std::time::Instant;
 struct Args {
     #[clap(short, long)]
     quiet: bool,
-    #[clap(short = 'n', long, value_parser, default_value_t = 10_000)]
-    iterations: u32,
-    #[clap(short = 'k', long, value_parser, default_value_t = 10.)]
-    cooling_rate: f64,
-    #[clap(short = 's', long, value_parser, default_value_t = 1.5)]
+    // #[clap(short = 'n', long, value_parser, default_value_t = 10_000)]
+    // iterations: u32,
+    #[clap(short = 'm', long, value_parser, default_value_t = 2_500)]
+    max_unchanged: u32,
+    #[clap(short = 'k', long, value_parser, default_value_t = 1_000.)]
+    cooling_hl: f64,
+    #[clap(short = 's', long, value_parser, default_value_t = 2.)]
     temp_scale: f64,
     #[clap(short, long, value_parser, default_value = "5")]
     trials: NonZeroU16,
@@ -64,14 +66,13 @@ fn run_trials(args: &Args, corpus: &[Vec<Win1252Char>], layout: &Layout) -> (Lay
     let results: Vec<_> = if args.quiet {
         iter::repeatn(layout, trials)
             .map(|l| {
-                optimise(
+                optimise_until_stable(
                     &cost_model,
-                    args.iterations,
-                    args.cooling_rate,
+                    args.max_unchanged,
+                    args.cooling_hl,
                     args.temp_scale,
                     l.clone(),
                     corpus,
-                    |_i| {},
                 )
             })
             .collect()
@@ -112,24 +113,40 @@ fn run_trials(args: &Args, corpus: &[Vec<Win1252Char>], layout: &Layout) -> (Lay
         // )
         // .1
 
-        let bar = ProgressBar::new(args.iterations as u64 * trials as u64)
-            .with_style(ProgressStyle::with_template("{percent:>3}% {wide_bar} {eta:>3}").unwrap());
+        // let bar = ProgressBar::new(args.iterations as u64 * trials as u64)
+        //     .with_style(ProgressStyle::with_template("{percent:>3}% {wide_bar} {eta:>3}").unwrap());
 
         let res = iter::repeatn(layout, trials)
-            .map(|l| {
-                optimise(
-                    &cost_model,
-                    args.iterations,
-                    args.cooling_rate,
-                    args.temp_scale,
-                    l.clone(),
-                    corpus,
-                    |_i| bar.inc(1),
-                )
+            .enumerate()
+            .map(|(i, l)| {
+                let res;
+                if i == 0 {
+                    let f = std::fs::File::create(format!("{i}.csv")).unwrap();
+                    res = optimise_log(
+                        &cost_model,
+                        args.max_unchanged,
+                        args.cooling_hl,
+                        args.temp_scale,
+                        l.clone(),
+                        corpus,
+                        std::io::BufWriter::new(f),
+                    );
+                } else {
+                    res = optimise_until_stable(
+                        &cost_model,
+                        args.max_unchanged,
+                        args.cooling_hl,
+                        args.temp_scale,
+                        l.clone(),
+                        corpus,
+                    );
+                }
+                eprintln!("finished {i}");
+                res
             })
             .collect();
 
-        bar.finish_and_clear();
+        // bar.finish_and_clear();
 
         res
     };
