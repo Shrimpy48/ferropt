@@ -1,3 +1,4 @@
+use arrayvec::ArrayVec;
 use encoding_rs::WINDOWS_1252;
 use enum_map::Enum;
 use enum_map::EnumMap;
@@ -5,6 +6,7 @@ use lazy_static::lazy_static;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 
+use std::collections::BTreeSet;
 use std::collections::VecDeque;
 use std::fmt;
 use std::iter::FusedIterator;
@@ -892,8 +894,8 @@ where
 
     fn handle_next(&mut self) -> bool {
         if let Some(c) = self.chars.next() {
-            match self.layout.char_idx[c] {
-                Some(CharIdxEntry {
+            match self.layout.char_idx[c].last() {
+                Some(&CharIdxEntry {
                     layer,
                     pos,
                     shifted,
@@ -1349,13 +1351,48 @@ pub fn to_bytes(string: String) -> Option<Vec<Win1252Char>> {
 
 // Assumes there is only one intended way of typing each character,
 // and that all typable characters have a single-byte representation.
-pub type CharIdx = EnumMap<Win1252Char, Option<CharIdxEntry>>;
+pub type CharIdx = EnumMap<Win1252Char, BTreeSet<CharIdxEntry>>;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// A way of typing a character. The ordering defines preference -
+/// a larger entry is chosen over a smaller one. The layer and pos are also incorporated
+/// so that entries are only equal if they are identical.
+#[derive(Debug, Clone, Copy, Eq)]
 pub struct CharIdxEntry {
     pub layer: u8,
     pub pos: u8,
     pub shifted: bool,
+}
+
+impl Ord for CharIdxEntry {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        let layer_order = (self.layer == 0).cmp(&(other.layer == 0));
+        if !matches!(layer_order, std::cmp::Ordering::Equal) {
+            return layer_order;
+        }
+        let shifted_order = (!self.shifted).cmp(&(!other.shifted));
+        if !matches!(shifted_order, std::cmp::Ordering::Equal) {
+            return shifted_order;
+        }
+        // Prefer smaller layer numbers and positions, all else being equal
+        let layer_order = other.layer.cmp(&self.layer);
+        if !matches!(layer_order, std::cmp::Ordering::Equal) {
+            return layer_order;
+        }
+        let pos_order = other.pos.cmp(&self.pos);
+        pos_order
+    }
+}
+
+impl PartialOrd for CharIdxEntry {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl PartialEq for CharIdxEntry {
+    fn eq(&self, other: &Self) -> bool {
+        matches!(self.cmp(other), std::cmp::Ordering::Equal)
+    }
 }
 
 lazy_static! {
@@ -1434,43 +1471,81 @@ impl AnnotatedLayout {
     }
 
     pub fn swap(&mut self, (layer_a, pos_a): (u8, u8), (layer_b, pos_b): (u8, u8)) {
+        if (layer_a, pos_a) == (layer_b, pos_b) {
+            return;
+        }
+
         let a = self.layout[layer_a][pos_a];
         let b = self.layout[layer_b][pos_b];
 
+        // Update char_idx.
+        // Entries must be removed together and inserted together so that keys which
+        // can type the same char are updated correctly.
+        let mut changed_entries: ArrayVec<_, 4> = ArrayVec::new();
         if let Some(c) = a.typed_char(false) {
-            let entry = self.char_idx[c].as_mut().unwrap();
+            let mut entry = self.char_idx[c]
+                .take(&CharIdxEntry {
+                    layer: layer_a,
+                    pos: pos_a,
+                    shifted: false,
+                })
+                .expect("typable key should have entry");
             assert!(!entry.shifted);
             assert_eq!(entry.layer, layer_a);
             assert_eq!(entry.pos, pos_a);
             entry.layer = layer_b;
             entry.pos = pos_b;
+            changed_entries.push((c, entry));
         }
         if let Some(c) = b.typed_char(false) {
-            let entry = self.char_idx[c].as_mut().unwrap();
+            let mut entry = self.char_idx[c]
+                .take(&CharIdxEntry {
+                    layer: layer_b,
+                    pos: pos_b,
+                    shifted: false,
+                })
+                .expect("typable key should have entry");
             assert!(!entry.shifted);
             assert_eq!(entry.layer, layer_b);
             assert_eq!(entry.pos, pos_b);
             entry.layer = layer_a;
             entry.pos = pos_a;
+            changed_entries.push((c, entry));
         }
         if let Some(c) = a.typed_char(true) {
-            let entry = self.char_idx[c].as_mut().unwrap();
-            if entry.shifted {
-                assert_eq!(entry.layer, layer_a);
-                assert_eq!(entry.pos, pos_a);
-                entry.layer = layer_b;
-                entry.pos = pos_b;
-            }
+            let mut entry = self.char_idx[c]
+                .take(&CharIdxEntry {
+                    layer: layer_a,
+                    pos: pos_a,
+                    shifted: true,
+                })
+                .expect("typable key should have shifted entry");
+            assert!(entry.shifted);
+            assert_eq!(entry.layer, layer_a);
+            assert_eq!(entry.pos, pos_a);
+            entry.layer = layer_b;
+            entry.pos = pos_b;
+            changed_entries.push((c, entry));
         }
         if let Some(c) = b.typed_char(true) {
-            let entry = self.char_idx[c].as_mut().unwrap();
-            if entry.shifted {
-                assert_eq!(entry.layer, layer_b);
-                assert_eq!(entry.pos, pos_b);
-                entry.layer = layer_a;
-                entry.pos = pos_a;
-            }
+            let mut entry = self.char_idx[c]
+                .take(&CharIdxEntry {
+                    layer: layer_b,
+                    pos: pos_b,
+                    shifted: true,
+                })
+                .expect("typable key should have shifted entry");
+            assert!(entry.shifted);
+            assert_eq!(entry.layer, layer_b);
+            assert_eq!(entry.pos, pos_b);
+            entry.layer = layer_a;
+            entry.pos = pos_a;
+            changed_entries.push((c, entry));
         }
+        for (c, entry) in changed_entries {
+            assert!(self.char_idx[c].insert(entry));
+        }
+
         if let Key::Layer(layer) = a {
             assert_eq!(layer_a, 0);
             assert_eq!(self.layer_idx[layer as usize], pos_a);
@@ -1525,7 +1600,7 @@ impl AnnotatedLayout {
                     NUMBERS
                         .iter()
                         .map(|&c| {
-                            let entry = self.char_idx[c].unwrap();
+                            let entry = self.char_idx[c].last().unwrap();
                             assert_eq!(entry.layer, self.num_layer);
                             entry.pos
                         })
@@ -1536,10 +1611,10 @@ impl AnnotatedLayout {
         );
 
         for (i, &new_pos) in NUM_LAYOUTS[new_layout as usize].iter().enumerate() {
-            let old_pos = self.char_idx[NUMBERS[i]].unwrap().pos;
+            let old_pos = self.char_idx[NUMBERS[i]].last().unwrap().pos;
             assert_eq!(
-                self.char_idx[NUMBERS[i]],
-                Some(CharIdxEntry {
+                self.char_idx[NUMBERS[i]].last(),
+                Some(&CharIdxEntry {
                     layer: self.num_layer,
                     pos: old_pos,
                     shifted: false
@@ -1555,8 +1630,8 @@ impl AnnotatedLayout {
                 Some(NUMBERS[i])
             );
             assert_eq!(
-                self.char_idx[NUMBERS[i]],
-                Some(CharIdxEntry {
+                self.char_idx[NUMBERS[i]].last(),
+                Some(&CharIdxEntry {
                     layer: self.num_layer,
                     pos: new_pos,
                     shifted: false
@@ -1573,7 +1648,7 @@ impl AnnotatedLayout {
                     NUMBERS
                         .iter()
                         .map(|&c| {
-                            let entry = self.char_idx[c].unwrap();
+                            let entry = self.char_idx[c].last().unwrap();
                             assert_eq!(entry.layer, self.num_layer);
                             entry.pos
                         })
@@ -1587,38 +1662,25 @@ impl AnnotatedLayout {
 
 impl From<Layout> for AnnotatedLayout {
     fn from(layout: Layout) -> Self {
-        let mut char_idx: CharIdx = (0..)
-            .zip(layout.iter())
-            .flat_map(|(i, l)| {
-                (0..).zip(l.iter()).filter_map(move |(j, k)| {
-                    k.typed_char(true).map(|c| {
-                        (
-                            c,
-                            Some(CharIdxEntry {
-                                layer: i,
-                                pos: j,
-                                shifted: true,
-                            }),
-                        )
-                    })
-                })
-            })
-            .collect();
-        char_idx.extend((0..).zip(layout.iter()).flat_map(|(i, l)| {
-            (0..).zip(l.iter()).filter_map(move |(j, k)| {
-                k.typed_char(false).map(|c| {
-                    (
-                        c,
-                        Some(CharIdxEntry {
-                            layer: i,
-                            pos: j,
-                            shifted: false,
-                        }),
-                    )
-                })
-            })
-        }));
-
+        let mut char_idx = CharIdx::default();
+        for (i, l) in (0..).zip(layout.iter()) {
+            for (j, k) in (0..).zip(l.iter()) {
+                if let Some(c) = k.typed_char(false) {
+                    char_idx[c].insert(CharIdxEntry {
+                        layer: i,
+                        pos: j,
+                        shifted: false,
+                    });
+                }
+                if let Some(c) = k.typed_char(true) {
+                    char_idx[c].insert(CharIdxEntry {
+                        layer: i,
+                        pos: j,
+                        shifted: true,
+                    });
+                }
+            }
+        }
         let layer_idx = (0..)
             .zip(layout[0].iter())
             .filter_map(move |(j, k)| match k {
@@ -1633,7 +1695,7 @@ impl From<Layout> for AnnotatedLayout {
             .zip(layout[0].iter())
             .find_map(|(i, k)| matches!(k, Key::Shift).then_some(i));
 
-        let (num_layer, num_layout) = match char_idx[NUMBERS[0]].map(|e| e.layer) {
+        let (num_layer, num_layout) = match char_idx[NUMBERS[0]].last().map(|e| e.layer) {
             Some(num_layer) => {
                 let num_layout = NUM_LAYOUTS
                     .iter()
@@ -1641,7 +1703,7 @@ impl From<Layout> for AnnotatedLayout {
                         NUMBERS
                             .iter()
                             .map(|&c| {
-                                let entry = char_idx[c].unwrap();
+                                let entry = char_idx[c].last().unwrap();
                                 assert_eq!(entry.layer, num_layer);
                                 entry.pos
                             })
@@ -1862,7 +1924,7 @@ mod tests {
         let available_chars: Vec<_> = layout
             .char_idx
             .iter()
-            .filter_map(|(k, v)| v.map(|_| k))
+            .filter_map(|(k, v)| (!v.is_empty()).then_some(k))
             .collect();
 
         let input_len = rng.gen_range(0..65536);
@@ -1884,7 +1946,7 @@ mod tests {
         let available_chars: Vec<_> = layout
             .char_idx
             .iter()
-            .filter_map(|(k, v)| v.map(|_| k))
+            .filter_map(|(k, v)| (!v.is_empty()).then_some(k))
             .collect();
 
         let input_len = rng.gen_range(0..65536);

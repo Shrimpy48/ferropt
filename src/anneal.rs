@@ -428,7 +428,11 @@ mod tests {
             let mutation = Mutation::gen(&mut rng, &layout);
             mutation.apply(&mut layout);
             mutation.undo(&mut layout);
-            assert_eq!(start.layout(), layout.layout());
+            assert_eq!(
+                start.layout(),
+                layout.layout(),
+                "mutation {mutation:?} not undone correctly"
+            );
         }
     }
 
@@ -450,7 +454,11 @@ mod tests {
             let mutation = Mutation::gen(&mut rng, &layout);
             mutation.apply(&mut layout);
             mutation.undo(&mut layout);
-            assert_eq!(start.layout(), layout.layout());
+            assert_eq!(
+                start.layout(),
+                layout.layout(),
+                "mutation {mutation:?} not undone correctly"
+            );
         }
     }
 
@@ -467,7 +475,11 @@ mod tests {
             let mutation = Mutation::gen(&mut rng, &layout);
             mutation.apply(&mut layout);
             mutation.undo(&mut layout);
-            assert_eq!(start.layout(), layout.layout());
+            assert_eq!(
+                start.layout(),
+                layout.layout(),
+                "mutation {mutation:?} not undone correctly"
+            );
         }
     }
 }

@@ -302,8 +302,8 @@ pub(super) fn memorability_cost(layout: &AnnotatedLayout) -> f64 {
     let ordered_pair_penalty: f64 = ORDERED_PAIRS
         .into_iter()
         .filter_map(|[l, r]| {
-            let l = layout.char_idx()[l]?;
-            let r = layout.char_idx()[r]?;
+            let l = layout.char_idx()[l].last()?;
+            let r = layout.char_idx()[r].last()?;
             Some(if l.layer != r.layer || l.shifted != r.shifted {
                 if l.pos != r.pos {
                     // Different key and layer.
@@ -346,8 +346,8 @@ pub(super) fn memorability_cost(layout: &AnnotatedLayout) -> f64 {
     let similar_pair_penalty: f64 = SIMILAR_PAIRS
         .into_iter()
         .filter_map(|[a, b]| {
-            let a = layout.char_idx()[a]?;
-            let b = layout.char_idx()[b]?;
+            let a = layout.char_idx()[a].last()?;
+            let b = layout.char_idx()[b].last()?;
             Some(if a.layer != b.layer || a.shifted != b.shifted {
                 if a.pos != b.pos {
                     // Different key and layer.
@@ -395,11 +395,11 @@ pub(super) fn memorability_cost(layout: &AnnotatedLayout) -> f64 {
         None | Some(30 | 31 | 32 | 33) => 0.,
         _ => 2.,
     };
-    let enter_penalty = match layout.char_idx()[*ENTER].map(|e| e.pos) {
+    let enter_penalty = match layout.char_idx()[*ENTER].last().map(|e| e.pos) {
         None | Some(30 | 31 | 32 | 33) => 0.,
         _ => 2.,
     };
-    let tab_penalty = match layout.char_idx()[*TAB].map(|e| e.pos) {
+    let tab_penalty = match layout.char_idx()[*TAB].last().map(|e| e.pos) {
         None | Some(30 | 31 | 32 | 33) => 0.,
         _ => 2.,
     };
@@ -539,7 +539,7 @@ fn layer_variation(char_idx: &CharIdx, chars: impl IntoIterator<Item = Win1252Ch
     let layers: Vec<_> = chars
         .into_iter()
         .filter_map(|c| {
-            let at = char_idx[c]?;
+            let at = char_idx[c].last()?;
             Some((at.layer, at.shifted))
         })
         .collect();
