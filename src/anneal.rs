@@ -328,8 +328,11 @@ pub fn optimise_until_stable<M: CostModel>(
         mutation.apply(&mut layout);
         let new_energy = cost_model.cost(corpus, &layout);
         match new_energy.partial_cmp(&energy).unwrap() {
-            cmp::Ordering::Less | cmp::Ordering::Equal => {
+            cmp::Ordering::Less => {
                 unchanged_count = 0;
+            }
+            cmp::Ordering::Equal => {
+                unchanged_count += 1;
             }
             cmp::Ordering::Greater => {
                 let temperature = t0 * (-i as f64 / hl).exp2();
@@ -382,8 +385,11 @@ pub fn optimise_log<M: CostModel>(
         mutation.apply(&mut layout);
         let new_energy = cost_model.cost(corpus, &layout);
         match new_energy.partial_cmp(&energy).unwrap() {
-            cmp::Ordering::Less | cmp::Ordering::Equal => {
+            cmp::Ordering::Less => {
                 unchanged_count = 0;
+            }
+            cmp::Ordering::Equal => {
+                unchanged_count += 1;
             }
             cmp::Ordering::Greater => {
                 let p = P0 * ((energy - new_energy) / temperature).exp();
