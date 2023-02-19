@@ -49,21 +49,30 @@ fn main() -> io::Result<()> {
 
     let corpus = read_corpus(&args.corpus)?;
 
-    let (l, _score) = run_trials(&args, &corpus, &layout);
-    let f = File::create(args.output)?;
-    serde_json::to_writer_pretty(f, &l)?;
+    let result = run_trials(&args, &corpus, &layout);
+    if args.output.extension().is_some() {
+        let f = File::create(args.output)?;
+        let (l, _) = result.first().unwrap();
+        serde_json::to_writer_pretty(f, &l)?;
+    } else {
+        std::fs::create_dir_all(&args.output)?;
+        for (l, score) in result {
+            let f = File::create(args.output.join(format!("{score}.json")))?;
+            serde_json::to_writer_pretty(f, &l)?;
+        }
+    }
 
     Ok(())
 }
 
-fn run_trials(args: &Args, corpus: &[Vec<Win1252Char>], layout: &Layout) -> (Layout, f64) {
+fn run_trials(args: &Args, corpus: &[Vec<Win1252Char>], layout: &Layout) -> Vec<(Layout, f64)> {
     let start = Instant::now();
 
     let cost_model = Model::default();
 
     let trials = args.trials.get() as usize;
 
-    let results: Vec<_> = if args.quiet {
+    let mut results: Vec<_> = if args.quiet {
         iter::repeatn(layout, trials)
             .map(|l| {
                 optimise_until_stable(
@@ -121,7 +130,7 @@ fn run_trials(args: &Args, corpus: &[Vec<Win1252Char>], layout: &Layout) -> (Lay
             .map(|(i, l)| {
                 let res;
                 if i == 0 {
-                    let f = std::fs::File::create(format!("{i}.csv")).unwrap();
+                    let f = std::fs::File::create("progression.csv").unwrap();
                     res = optimise_log(
                         &cost_model,
                         args.max_unchanged,
@@ -173,10 +182,9 @@ fn run_trials(args: &Args, corpus: &[Vec<Win1252Char>], layout: &Layout) -> (Lay
         graph(80, &results);
     }
 
-    let best = results
-        .into_iter()
-        .max_by(|(_, a), (_, b)| a.total_cmp(b))
-        .unwrap();
+    results.sort_by(|(_, a), (_, b)| b.total_cmp(a));
+
+    let best = results.first().unwrap();
 
     if !args.quiet {
         eprintln!(
@@ -189,7 +197,7 @@ fn run_trials(args: &Args, corpus: &[Vec<Win1252Char>], layout: &Layout) -> (Lay
         );
     }
 
-    best
+    results
 }
 
 fn graph(width: usize, results: &[(Layout, f64)]) {

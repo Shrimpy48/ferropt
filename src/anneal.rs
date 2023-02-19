@@ -335,7 +335,8 @@ pub fn optimise_until_stable<M: CostModel>(
                 unchanged_count += 1;
             }
             cmp::Ordering::Greater => {
-                let temperature = t0 * (-i as f64 / hl).exp2();
+                // let temperature = t0 * (-i as f64 / hl).exp2();
+                let temperature = t0 * (1. - i as f64 / (hl * 2.)).max(0.);
                 let p = P0 * ((energy - new_energy) / temperature).exp();
                 if !rng.gen_bool(p) {
                     mutation.undo(&mut layout);
@@ -378,8 +379,8 @@ pub fn optimise_log<M: CostModel>(
     let mut unchanged_count = 0;
     writeln!(log_writer, "iteration,temperature,energy").unwrap();
     for i in 0.. {
-        let temperature = t0 * (-i as f64 / hl).exp2();
-        // let temperature = t0 * (1. - i as f64 / (hl * 2.)).max(0.);
+        // let temperature = t0 * (-i as f64 / hl).exp2();
+        let temperature = t0 * (1. - i as f64 / (hl * 2.)).max(0.);
         writeln!(log_writer, "{i},{temperature},{energy}").unwrap();
         let mutation = Mutation::gen(&mut rng, &layout);
         mutation.apply(&mut layout);
