@@ -41,5 +41,5 @@ lazy_static = "1.4"
 indicatif = { version = "0.17", features = ["improved_unicode", "rayon"] }
 enum-map = "2.4"
 dhat = { version = "0.3", optional = true }
-clap = { version = "4.0", features = ["derive"] }
+clap = { version = "4.1", features = ["derive"] }
 arrayvec = "0.7"
