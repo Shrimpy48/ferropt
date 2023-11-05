@@ -395,11 +395,11 @@ pub(super) fn memorability_cost(layout: &AnnotatedLayout) -> f64 {
         None | Some(30 | 31 | 32 | 33) => 0.,
         _ => 2.,
     };
-    let enter_penalty = match layout.char_idx()[*ENTER].last().map(|e| e.pos) {
+    let enter_penalty = match layout.char_idx()[ENTER].last().map(|e| e.pos) {
         None | Some(30 | 31 | 32 | 33) => 0.,
         _ => 2.,
     };
-    let tab_penalty = match layout.char_idx()[*TAB].last().map(|e| e.pos) {
+    let tab_penalty = match layout.char_idx()[TAB].last().map(|e| e.pos) {
         None | Some(30 | 31 | 32 | 33) => 0.,
         _ => 2.,
     };
